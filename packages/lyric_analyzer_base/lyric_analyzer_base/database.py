@@ -16,7 +16,7 @@ from polars import DataFrame, Series
 # PSG_DB_URI = f'postgresql+psycopg2://postgres:postgres@localhost:5432/discogs'
 # eng = create_engine(PSG_DB_URI)
 
-DUCKDB_FILE = os.environ.get('DUCKDB_FILE', 'data/spotify.duckdb')
+DUCKDB_FILE = os.environ.get('DUCKDB_FILE', 'data/spotify_dlt.duckdb')
 
 
 def duckdb_list_tables(cxn: duckdb.DuckDBPyConnection = None) -> Series:

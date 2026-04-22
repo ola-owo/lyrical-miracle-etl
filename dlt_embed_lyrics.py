@@ -220,7 +220,7 @@ def embed_lyrics(lyrics: pa.Table) -> pa.Table:
     )
 
 
-SPOTIFY_DB = Path('data/spotify.duckdb')
+SPOTIFY_DB = Path('data/spotify_dlt.duckdb')
 DEST_TABLE = 'lyrics_embed'
 duckdb_dest = dlt.destinations.duckdb(str(SPOTIFY_DB))
 pipeline = dlt.pipeline('lyrics_embed', destination=duckdb_dest, dataset_name='genius')

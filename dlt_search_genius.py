@@ -25,7 +25,7 @@ from lyric_analyzer_base.utils import normalize_song_titles
 log = logging.getLogger('dlt')
 
 DATA_DIR = Path('data')
-SPOTIFY_DATABASE = DATA_DIR / 'spotify.duckdb'
+SPOTIFY_DATABASE = DATA_DIR / 'spotify_dlt.duckdb'
 SPOTIFY_TRACKS_FILE = DATA_DIR / 'tracks.parquet'
 SPOTIFY_TRACKS_SAMPLE_FILE = DATA_DIR / 'tracks-sample.parquet'
 

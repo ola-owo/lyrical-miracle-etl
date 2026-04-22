@@ -5,6 +5,7 @@ API endpoint: https://developer.spotify.com/documentation/web-api/reference/get-
 
 from typing import Iterable
 from pathlib import Path
+import logging
 
 import polars as pl
 import dlt
@@ -12,8 +13,10 @@ from dlt import source, resource, transformer
 from dlt.sources.helpers.rest_client import RESTClient
 from dlt.sources.helpers.rest_client.auth import OAuth2ClientCredentials
 
-# SPOTIFY_DATA_DIR = Path('/run/media/ola/T5linux/Data/spotify')
-SPOTIFY_DATA_DIR = Path('data')
+log = logging.getLogger('dlt')
+
+SPOTIFY_DATA_DIR = Path('/run/media/ola/T5linux/Data/MUSIC/spotify-dump')
+# SPOTIFY_DATA_DIR = Path('data')
 SPOTIFY_DATA_FILE = SPOTIFY_DATA_DIR / 'Streaming_History_Song.parquet'
 SPOTIFY_MAX_TRACKS_PER_REQUEST = 50
 
@@ -38,13 +41,11 @@ def spotify(track_ids: Iterable[str]):
 
     @resource(write_disposition='append')
     def tracks_fulldata(track_ids: Iterable[str]):
-        FIELDS_TO_DROP = ['preview_url']  # deprecated field, API always returns null
-        track_ids_str = ','.join(track_ids)
-        for track in spotify_client.get(
-            '/tracks', params={'ids': track_ids_str}
-        ).json()['tracks']:
-            for field in FIELDS_TO_DROP:
-                track.pop(field, None)
+        for track_id in track_ids:
+            res = spotify_client.get(f'/tracks/{track_id}')
+            log.warning(f"API RESPONSE: {res}")
+            track = res.json()
+            track.pop('preview_url', None)
             yield track
 
     @transformer(data_from=tracks_fulldata, write_disposition='merge', primary_key='id')
@@ -91,45 +92,47 @@ def spotify(track_ids: Iterable[str]):
 
 
 # TEST PIPELINE
-# streams = pl.read_parquet(SPOTIFY_DATA_DIR / 'Streaming_History_Song.parquet')
-# track_ids = (
-#     streams.select(pl.col('spotify_track_uri').unique()
-#                    .str.split_exact(':', 2).struct.field('field_2').alias('id'))
-# )
-# track_ids_sample = track_ids.head(n=50).get_column('id')
-# pipeline = dlt.pipeline('spotify', destination='duckdb', dev_mode=True)
-# load_info = pipeline.run(spotify(track_ids_sample))
+streams = pl.scan_parquet(SPOTIFY_DATA_DIR / 'Streaming_History_Song.parquet')
+track_ids_sample = (
+    streams.head(100)
+    .select(id = pl.col('spotify_track_uri').unique()
+            .str.split_exact(':', 2).struct.field('field_2'))
+    .collect().to_series()
+    .sample(3)
+)
+pipeline = dlt.pipeline('spotify', destination='duckdb', dev_mode=True)
+load_info = pipeline.run(spotify(track_ids_sample))
 
 
 # FULL PIPELINE
 # get existing track ids from duckdb
-pipeline = dlt.pipeline(
-    'spotify',
-    destination=dlt.destinations.duckdb(str(SPOTIFY_DATA_DIR / 'spotify.duckdb')),
-)
-if 'tracks' in pipeline.dataset('spotify').tables:
-    old_tracks = (
-        pl.LazyFrame(pipeline.dataset('spotify').table('tracks').arrow())
-        .select(pl.col('id').unique())
-        .collect()
-    )
-else:
-    old_tracks = pl.LazyFrame(schema={'id': pl.String})
+# pipeline = dlt.pipeline(
+#     'spotify',
+#     destination=dlt.destinations.duckdb(str(SPOTIFY_DATA_DIR / 'spotify_dlt.duckdb')),
+# )
+# if 'tracks' in pipeline.dataset('spotify').tables:
+#     old_tracks = (
+#         pl.LazyFrame(pipeline.dataset('spotify').table('tracks').arrow())
+#         .select(pl.col('id').unique())
+#         .collect()
+#     )
+# else:
+#     old_tracks = pl.LazyFrame(schema={'id': pl.String})
 
-track_ids_all = (
-    pl.scan_parquet(SPOTIFY_DATA_FILE)
-    .select(
-        pl.col('spotify_track_uri')
-        .unique()
-        .str.split_exact(':', 2)
-        .struct.field('field_2')
-        .alias('id')
-    )
-    .join(old_tracks.lazy(), on='id', how='anti')  # filter out existing track ids
-)
-track_ids_iter = track_ids_all.collect_batches(
-    chunk_size=SPOTIFY_MAX_TRACKS_PER_REQUEST
-)
-for track_ids in track_ids_iter:
-    load_info = pipeline.run(spotify(track_ids['id']))
-    print(load_info)
+# track_ids_all = (
+#     pl.scan_parquet(SPOTIFY_DATA_FILE)
+#     .select(
+#         pl.col('spotify_track_uri')
+#         .unique()
+#         .str.split_exact(':', 2)
+#         .struct.field('field_2')
+#         .alias('id')
+#     )
+#     .join(old_tracks.lazy(), on='id', how='anti')  # filter out existing track ids
+# )
+# track_ids_iter = track_ids_all.collect_batches(
+#     chunk_size=SPOTIFY_MAX_TRACKS_PER_REQUEST
+# )
+# for track_ids in track_ids_iter:
+#     load_info = pipeline.run(spotify(track_ids['id']))
+#     print(load_info)

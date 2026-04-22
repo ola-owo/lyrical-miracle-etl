@@ -9,7 +9,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 from lyric_analyzer_base.utils import normalize_song_titles
 
-SPOTIFY_DB = Path('data/spotify.duckdb')
+SPOTIFY_DB = Path('data/spotify_dlt.duckdb')
 
 with duckdb.connect(SPOTIFY_DB, read_only=True) as cxn:
     df_search_results = cxn.sql('select * from genius.genius_searches').pl()

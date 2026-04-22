@@ -21,7 +21,7 @@ from lyric_analyzer_base.database import *
 
 
 log = logging.getLogger('dlt')
-SPOTIFY_DB = Path('data/spotify.duckdb')
+SPOTIFY_DB = Path('data/spotify_dlt.duckdb')
 
 # Build the lyricsgenius client
 excluded_terms = _excluded_terms.copy()
