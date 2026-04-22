@@ -10,3 +10,8 @@ add_dlt_id = true
 [sources.spotify]
 api_base = "https://api.spotify.com/v1"
 token_url = "https://accounts.spotify.com/api/token"
+callback_addr = "127.0.0.1"
+callback_port = 3000
+
+[sources.lastfm]
+api_base = "https://ws.audioscrobbler.com/2.0"

@@ -2,10 +2,11 @@
 *.pkl*
 *.duckdb
 *.gz
+*.parquet
 apps/dashboard/data/
 
 # API keys
-keys.yml
+keys/
 
 # Gitignore template below copied from:
 # https://github.com/github/gitignore/blob/main/Python.gitignore
