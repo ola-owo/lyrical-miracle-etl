@@ -1,0 +1,974 @@
+version: 23
+version_hash: fxr4hWe5gGDMNYPZzN3Ra6uKz+Ec6VINFiIuMyYZJiI=
+engine_version: 11
+name: genius_song_meta
+tables:
+  _dlt_version:
+    columns:
+      version:
+        data_type: bigint
+        nullable: false
+      engine_version:
+        data_type: bigint
+        nullable: false
+      inserted_at:
+        data_type: timestamp
+        nullable: false
+      schema_name:
+        data_type: text
+        nullable: false
+      version_hash:
+        data_type: text
+        nullable: false
+      schema:
+        data_type: text
+        nullable: false
+    write_disposition: skip
+    resource: _dlt_version
+    description: Created by DLT. Tracks schema updates
+  _dlt_loads:
+    columns:
+      load_id:
+        data_type: text
+        nullable: false
+        precision: 64
+      schema_name:
+        data_type: text
+        nullable: true
+      status:
+        data_type: bigint
+        nullable: false
+      inserted_at:
+        data_type: timestamp
+        nullable: false
+      schema_version_hash:
+        data_type: text
+        nullable: true
+    write_disposition: skip
+    resource: _dlt_loads
+    description: Created by DLT. Tracks completed loads
+  _dlt_pipeline_state:
+    columns:
+      version:
+        data_type: bigint
+        nullable: false
+      engine_version:
+        data_type: bigint
+        nullable: false
+      pipeline_name:
+        data_type: text
+        nullable: false
+      state:
+        data_type: text
+        nullable: false
+      created_at:
+        data_type: timestamp
+        nullable: false
+      version_hash:
+        data_type: text
+        nullable: true
+      _dlt_load_id:
+        data_type: text
+        nullable: false
+        precision: 64
+      _dlt_id:
+        data_type: text
+        nullable: false
+        unique: true
+        row_key: true
+    write_disposition: append
+    file_format: preferred
+    resource: _dlt_pipeline_state
+  songs:
+    columns:
+      annotation_count:
+        data_type: bigint
+        nullable: true
+      api_path:
+        data_type: text
+        nullable: true
+      apple_music_id:
+        data_type: text
+        nullable: true
+      apple_music_player_url:
+        data_type: text
+        nullable: true
+      artist_names:
+        data_type: text
+        nullable: true
+      description__plain:
+        data_type: text
+        nullable: true
+      embed_content:
+        data_type: text
+        nullable: true
+      full_title:
+        data_type: text
+        nullable: true
+      header_image_thumbnail_url:
+        data_type: text
+        nullable: true
+      header_image_url:
+        data_type: text
+        nullable: true
+      id:
+        data_type: bigint
+        nullable: false
+        primary_key: true
+      language:
+        data_type: text
+        nullable: true
+      lyrics_owner_id:
+        data_type: bigint
+        nullable: true
+      lyrics_state:
+        data_type: text
+        nullable: true
+      path:
+        data_type: text
+        nullable: true
+      primary_artist_names:
+        data_type: text
+        nullable: true
+      pyongs_count:
+        data_type: bigint
+        nullable: true
+      recording_location:
+        data_type: text
+        nullable: true
+      relationships_index_url:
+        data_type: text
+        nullable: true
+      release_date:
+        data_type: date
+        nullable: true
+      release_date_for_display:
+        data_type: text
+        nullable: true
+      release_date_with_abbreviated_month_for_display:
+        data_type: text
+        nullable: true
+      song_art_image_thumbnail_url:
+        data_type: text
+        nullable: true
+      song_art_image_url:
+        data_type: text
+        nullable: true
+      stats__accepted_annotations:
+        data_type: bigint
+        nullable: true
+      stats__contributors:
+        data_type: bigint
+        nullable: true
+      stats__iq_earners:
+        data_type: bigint
+        nullable: true
+      stats__transcribers:
+        data_type: bigint
+        nullable: true
+      stats__unreviewed_annotations:
+        data_type: bigint
+        nullable: true
+      stats__verified_annotations:
+        data_type: bigint
+        nullable: true
+      stats__hot:
+        data_type: bool
+        nullable: true
+      stats__pageviews:
+        data_type: bigint
+        nullable: true
+      title:
+        data_type: text
+        nullable: true
+      title_with_featured:
+        data_type: text
+        nullable: true
+      url:
+        data_type: text
+        nullable: true
+      current_user_metadata__interactions__pyong:
+        data_type: bool
+        nullable: true
+      current_user_metadata__interactions__following:
+        data_type: bool
+        nullable: true
+      song_art_primary_color:
+        data_type: text
+        nullable: true
+      song_art_secondary_color:
+        data_type: text
+        nullable: true
+      song_art_text_color:
+        data_type: text
+        nullable: true
+      album__api_path:
+        data_type: text
+        nullable: true
+      album__cover_art_url:
+        data_type: text
+        nullable: true
+      album__full_title:
+        data_type: text
+        nullable: true
+      album__id:
+        data_type: bigint
+        nullable: true
+      album__name:
+        data_type: text
+        nullable: true
+      album__primary_artist_names:
+        data_type: text
+        nullable: true
+      album__release_date_for_display:
+        data_type: text
+        nullable: true
+      album__url:
+        data_type: text
+        nullable: true
+      album__artist__api_path:
+        data_type: text
+        nullable: true
+      album__artist__header_image_url:
+        data_type: text
+        nullable: true
+      album__artist__id:
+        data_type: bigint
+        nullable: true
+      album__artist__image_url:
+        data_type: text
+        nullable: true
+      album__artist__is_meme_verified:
+        data_type: bool
+        nullable: true
+      album__artist__is_verified:
+        data_type: bool
+        nullable: true
+      album__artist__name:
+        data_type: text
+        nullable: true
+      album__artist__url:
+        data_type: text
+        nullable: true
+      primary_artist__api_path:
+        data_type: text
+        nullable: true
+      primary_artist__header_image_url:
+        data_type: text
+        nullable: true
+      primary_artist__id:
+        data_type: bigint
+        nullable: true
+      primary_artist__image_url:
+        data_type: text
+        nullable: true
+      primary_artist__is_meme_verified:
+        data_type: bool
+        nullable: true
+      primary_artist__is_verified:
+        data_type: bool
+        nullable: true
+      primary_artist__name:
+        data_type: text
+        nullable: true
+      primary_artist__url:
+        data_type: text
+        nullable: true
+      _dlt_load_id:
+        data_type: text
+        nullable: false
+        precision: 64
+      _dlt_id:
+        data_type: text
+        nullable: false
+        unique: true
+        row_key: true
+        precision: 64
+      album__artist__iq:
+        nullable: true
+        data_type: bigint
+      primary_artist__iq:
+        nullable: true
+        data_type: bigint
+      pending_lyrics_edits_count:
+        data_type: bigint
+        nullable: true
+    write_disposition: merge
+    resource: get_song_metadata
+  songs__current_user_metadata__permissions:
+    columns:
+      value:
+        data_type: text
+        nullable: true
+      _dlt_parent_id:
+        data_type: text
+        nullable: false
+        parent_key: true
+      _dlt_list_idx:
+        data_type: bigint
+        nullable: false
+      _dlt_id:
+        data_type: text
+        nullable: false
+        unique: true
+        row_key: true
+    parent: songs
+  songs__current_user_metadata__excluded_permissions:
+    columns:
+      value:
+        data_type: text
+        nullable: true
+      _dlt_parent_id:
+        data_type: text
+        nullable: false
+        parent_key: true
+      _dlt_list_idx:
+        data_type: bigint
+        nullable: false
+      _dlt_id:
+        data_type: text
+        nullable: false
+        unique: true
+        row_key: true
+    parent: songs
+  songs__album__primary_artists:
+    columns:
+      api_path:
+        data_type: text
+        nullable: true
+      header_image_url:
+        data_type: text
+        nullable: true
+      id:
+        data_type: bigint
+        nullable: true
+      image_url:
+        data_type: text
+        nullable: true
+      is_meme_verified:
+        data_type: bool
+        nullable: true
+      is_verified:
+        data_type: bool
+        nullable: true
+      name:
+        data_type: text
+        nullable: true
+      url:
+        data_type: text
+        nullable: true
+      _dlt_parent_id:
+        data_type: text
+        nullable: false
+        parent_key: true
+      _dlt_list_idx:
+        data_type: bigint
+        nullable: false
+      _dlt_id:
+        data_type: text
+        nullable: false
+        unique: true
+        row_key: true
+      iq:
+        data_type: bigint
+        nullable: true
+      _dlt_root_id:
+        data_type: text
+        nullable: false
+        root_key: true
+    parent: songs
+  songs__custom_performances:
+    columns:
+      label:
+        data_type: text
+        nullable: true
+      _dlt_parent_id:
+        data_type: text
+        nullable: false
+        parent_key: true
+      _dlt_list_idx:
+        data_type: bigint
+        nullable: false
+      _dlt_id:
+        data_type: text
+        nullable: false
+        unique: true
+        row_key: true
+      _dlt_root_id:
+        data_type: text
+        nullable: false
+        root_key: true
+    parent: songs
+  songs__custom_performances__artists:
+    columns:
+      api_path:
+        data_type: text
+        nullable: true
+      header_image_url:
+        data_type: text
+        nullable: true
+      id:
+        data_type: bigint
+        nullable: true
+      image_url:
+        data_type: text
+        nullable: true
+      is_meme_verified:
+        data_type: bool
+        nullable: true
+      is_verified:
+        data_type: bool
+        nullable: true
+      name:
+        data_type: text
+        nullable: true
+      url:
+        data_type: text
+        nullable: true
+      _dlt_parent_id:
+        data_type: text
+        nullable: false
+        parent_key: true
+      _dlt_list_idx:
+        data_type: bigint
+        nullable: false
+      _dlt_id:
+        data_type: text
+        nullable: false
+        unique: true
+        row_key: true
+      iq:
+        data_type: bigint
+        nullable: true
+      _dlt_root_id:
+        data_type: text
+        nullable: false
+        root_key: true
+    parent: songs__custom_performances
+  songs__featured_artists:
+    columns:
+      api_path:
+        data_type: text
+        nullable: true
+      header_image_url:
+        data_type: text
+        nullable: true
+      id:
+        data_type: bigint
+        nullable: true
+      image_url:
+        data_type: text
+        nullable: true
+      is_meme_verified:
+        data_type: bool
+        nullable: true
+      is_verified:
+        data_type: bool
+        nullable: true
+      name:
+        data_type: text
+        nullable: true
+      url:
+        data_type: text
+        nullable: true
+      _dlt_parent_id:
+        data_type: text
+        nullable: false
+        parent_key: true
+      _dlt_list_idx:
+        data_type: bigint
+        nullable: false
+      _dlt_id:
+        data_type: text
+        nullable: false
+        unique: true
+        row_key: true
+      iq:
+        data_type: bigint
+        nullable: true
+      _dlt_root_id:
+        data_type: text
+        nullable: false
+        root_key: true
+    parent: songs
+  songs__media:
+    columns:
+      provider:
+        data_type: text
+        nullable: true
+      start:
+        data_type: bigint
+        nullable: true
+      type:
+        data_type: text
+        nullable: true
+      url:
+        data_type: text
+        nullable: true
+      _dlt_parent_id:
+        data_type: text
+        nullable: false
+        parent_key: true
+      _dlt_list_idx:
+        data_type: bigint
+        nullable: false
+      _dlt_id:
+        data_type: text
+        nullable: false
+        unique: true
+        row_key: true
+      native_uri:
+        data_type: text
+        nullable: true
+      attribution:
+        data_type: text
+        nullable: true
+      _dlt_root_id:
+        data_type: text
+        nullable: false
+        root_key: true
+    parent: songs
+  songs__primary_artists:
+    columns:
+      api_path:
+        data_type: text
+        nullable: true
+      header_image_url:
+        data_type: text
+        nullable: true
+      id:
+        data_type: bigint
+        nullable: true
+      image_url:
+        data_type: text
+        nullable: true
+      is_meme_verified:
+        data_type: bool
+        nullable: true
+      is_verified:
+        data_type: bool
+        nullable: true
+      name:
+        data_type: text
+        nullable: true
+      url:
+        data_type: text
+        nullable: true
+      _dlt_parent_id:
+        data_type: text
+        nullable: false
+        parent_key: true
+      _dlt_list_idx:
+        data_type: bigint
+        nullable: false
+      _dlt_id:
+        data_type: text
+        nullable: false
+        unique: true
+        row_key: true
+      iq:
+        data_type: bigint
+        nullable: true
+      _dlt_root_id:
+        data_type: text
+        nullable: false
+        root_key: true
+    parent: songs
+  songs__producer_artists:
+    columns:
+      api_path:
+        data_type: text
+        nullable: true
+      header_image_url:
+        data_type: text
+        nullable: true
+      id:
+        data_type: bigint
+        nullable: true
+      image_url:
+        data_type: text
+        nullable: true
+      is_meme_verified:
+        data_type: bool
+        nullable: true
+      is_verified:
+        data_type: bool
+        nullable: true
+      name:
+        data_type: text
+        nullable: true
+      url:
+        data_type: text
+        nullable: true
+      _dlt_parent_id:
+        data_type: text
+        nullable: false
+        parent_key: true
+      _dlt_list_idx:
+        data_type: bigint
+        nullable: false
+      _dlt_id:
+        data_type: text
+        nullable: false
+        unique: true
+        row_key: true
+      iq:
+        data_type: bigint
+        nullable: true
+      _dlt_root_id:
+        data_type: text
+        nullable: false
+        root_key: true
+    parent: songs
+  songs__song_relationships:
+    columns:
+      relationship_type:
+        data_type: text
+        nullable: true
+      type:
+        data_type: text
+        nullable: true
+      url:
+        data_type: text
+        nullable: true
+      _dlt_parent_id:
+        data_type: text
+        nullable: false
+        parent_key: true
+      _dlt_list_idx:
+        data_type: bigint
+        nullable: false
+      _dlt_id:
+        data_type: text
+        nullable: false
+        unique: true
+        row_key: true
+    parent: songs
+  songs__song_relationships__songs:
+    columns:
+      annotation_count:
+        data_type: bigint
+        nullable: true
+      api_path:
+        data_type: text
+        nullable: true
+      artist_names:
+        data_type: text
+        nullable: true
+      full_title:
+        data_type: text
+        nullable: true
+      header_image_thumbnail_url:
+        data_type: text
+        nullable: true
+      header_image_url:
+        data_type: text
+        nullable: true
+      id:
+        data_type: bigint
+        nullable: true
+      lyrics_owner_id:
+        data_type: bigint
+        nullable: true
+      lyrics_state:
+        data_type: text
+        nullable: true
+      path:
+        data_type: text
+        nullable: true
+      primary_artist_names:
+        data_type: text
+        nullable: true
+      relationships_index_url:
+        data_type: text
+        nullable: true
+      release_date_components__year:
+        data_type: bigint
+        nullable: true
+      release_date_for_display:
+        data_type: text
+        nullable: true
+      release_date_with_abbreviated_month_for_display:
+        data_type: text
+        nullable: true
+      song_art_image_thumbnail_url:
+        data_type: text
+        nullable: true
+      song_art_image_url:
+        data_type: text
+        nullable: true
+      stats__unreviewed_annotations:
+        data_type: bigint
+        nullable: true
+      stats__hot:
+        data_type: bool
+        nullable: true
+      title:
+        data_type: text
+        nullable: true
+      title_with_featured:
+        data_type: text
+        nullable: true
+      url:
+        data_type: text
+        nullable: true
+      primary_artist__api_path:
+        data_type: text
+        nullable: true
+      primary_artist__header_image_url:
+        data_type: text
+        nullable: true
+      primary_artist__id:
+        data_type: bigint
+        nullable: true
+      primary_artist__image_url:
+        data_type: text
+        nullable: true
+      primary_artist__is_meme_verified:
+        data_type: bool
+        nullable: true
+      primary_artist__is_verified:
+        data_type: bool
+        nullable: true
+      primary_artist__name:
+        data_type: text
+        nullable: true
+      primary_artist__url:
+        data_type: text
+        nullable: true
+      _dlt_parent_id:
+        data_type: text
+        nullable: false
+        parent_key: true
+      _dlt_list_idx:
+        data_type: bigint
+        nullable: false
+      _dlt_id:
+        data_type: text
+        nullable: false
+        unique: true
+        row_key: true
+      primary_artist__iq:
+        data_type: bigint
+        nullable: true
+      pyongs_count:
+        data_type: bigint
+        nullable: true
+      release_date_components__month:
+        data_type: bigint
+        nullable: true
+      release_date_components__day:
+        data_type: bigint
+        nullable: true
+      stats__pageviews:
+        data_type: bigint
+        nullable: true
+    parent: songs__song_relationships
+  songs__song_relationships__songs__primary_artists:
+    columns:
+      api_path:
+        data_type: text
+        nullable: true
+      header_image_url:
+        data_type: text
+        nullable: true
+      id:
+        data_type: bigint
+        nullable: true
+      image_url:
+        data_type: text
+        nullable: true
+      is_meme_verified:
+        data_type: bool
+        nullable: true
+      is_verified:
+        data_type: bool
+        nullable: true
+      name:
+        data_type: text
+        nullable: true
+      url:
+        data_type: text
+        nullable: true
+      _dlt_parent_id:
+        data_type: text
+        nullable: false
+        parent_key: true
+      _dlt_list_idx:
+        data_type: bigint
+        nullable: false
+      _dlt_id:
+        data_type: text
+        nullable: false
+        unique: true
+        row_key: true
+      iq:
+        data_type: bigint
+        nullable: true
+    parent: songs__song_relationships__songs
+  songs__song_relationships__songs__featured_artists:
+    columns:
+      api_path:
+        data_type: text
+        nullable: true
+      header_image_url:
+        data_type: text
+        nullable: true
+      id:
+        data_type: bigint
+        nullable: true
+      image_url:
+        data_type: text
+        nullable: true
+      is_meme_verified:
+        data_type: bool
+        nullable: true
+      is_verified:
+        data_type: bool
+        nullable: true
+      name:
+        data_type: text
+        nullable: true
+      url:
+        data_type: text
+        nullable: true
+      _dlt_parent_id:
+        data_type: text
+        nullable: false
+        parent_key: true
+      _dlt_list_idx:
+        data_type: bigint
+        nullable: false
+      _dlt_id:
+        data_type: text
+        nullable: false
+        unique: true
+        row_key: true
+      iq:
+        data_type: bigint
+        nullable: true
+    parent: songs__song_relationships__songs
+  songs__writer_artists:
+    columns:
+      api_path:
+        data_type: text
+        nullable: true
+      header_image_url:
+        data_type: text
+        nullable: true
+      id:
+        data_type: bigint
+        nullable: true
+      image_url:
+        data_type: text
+        nullable: true
+      is_meme_verified:
+        data_type: bool
+        nullable: true
+      is_verified:
+        data_type: bool
+        nullable: true
+      name:
+        data_type: text
+        nullable: true
+      url:
+        data_type: text
+        nullable: true
+      _dlt_parent_id:
+        data_type: text
+        nullable: false
+        parent_key: true
+      _dlt_list_idx:
+        data_type: bigint
+        nullable: false
+      _dlt_id:
+        data_type: text
+        nullable: false
+        unique: true
+        row_key: true
+      iq:
+        data_type: bigint
+        nullable: true
+      _dlt_root_id:
+        data_type: text
+        nullable: false
+        root_key: true
+    parent: songs
+  songs__translation_songs:
+    columns:
+      api_path:
+        data_type: text
+        nullable: true
+      id:
+        data_type: bigint
+        nullable: true
+      language:
+        data_type: text
+        nullable: true
+      lyrics_state:
+        data_type: text
+        nullable: true
+      path:
+        data_type: text
+        nullable: true
+      title:
+        data_type: text
+        nullable: true
+      url:
+        data_type: text
+        nullable: true
+      _dlt_parent_id:
+        data_type: text
+        nullable: false
+        parent_key: true
+      _dlt_list_idx:
+        data_type: bigint
+        nullable: false
+      _dlt_id:
+        data_type: text
+        nullable: false
+        unique: true
+        row_key: true
+      _dlt_root_id:
+        data_type: text
+        nullable: false
+        root_key: true
+    parent: songs
+settings:
+  detections:
+  - iso_timestamp
+  default_hints:
+    not_null:
+    - _dlt_id
+    - _dlt_root_id
+    - _dlt_parent_id
+    - _dlt_list_idx
+    - _dlt_load_id
+    parent_key:
+    - _dlt_parent_id
+    root_key:
+    - _dlt_root_id
+    unique:
+    - _dlt_id
+    row_key:
+    - _dlt_id
+normalizers:
+  names: snake_case
+  json:
+    module: dlt.common.normalizers.json.relational
+    config:
+      propagation:
+        tables:
+          songs:
+            _dlt_id: _dlt_root_id
+previous_hashes:
+- qW5FvG6bUMcNBISj9x5wcgxjAxNR3kYxTU0/+ROCqog=
+- gsEhBsdpuT0otBLxiCd9A223G/nNjvjmcVDJuxW2XFA=
+- zcRtvCbih2WQE6b5SHRC0auNcEEm+OKr7vtqrSL/9K4=
+- ClA+I4accMIi4oss1Ixqpx+J5IIPWYLxzNpekZM8URc=
+- /ALRP2rqmdVDhDKWvsNQHDsdOUpVMZwAb1PpP/i7v1E=
+- MG4OVRGdo9bI3s4jqcMwaTio1JdL71+/8VHHOaw6afs=
+- Uvx5HqMBV3j2044t2H3Fev/lWwjULsvIfMEwnapFRhI=
+- FFwB1ekxTAKRYB4yppe86C04WDQj8ri11cbwF1kVuDc=
+- a4md/vOm/tdXotj8HhvjLE6umzPcNMXUNyZ+IJF/E6M=
+- /4csT4FAy942dTMZSiIbU+QMDlL2pDvbDLhpGYKT21E=

@@ -54,7 +54,6 @@ _genius_client_excluded_terms = [
 
 
 def make_genius_client(
-    verbose=False,
     remove_section_headers=True,
     skip_non_songs=False,
     excluded_terms=_genius_client_excluded_terms,
@@ -68,7 +67,6 @@ def make_genius_client(
     excluded_terms.remove('instrumental')
     client = Genius(
         dlt.secrets['sources.genius.token'],
-        verbose=verbose,
         remove_section_headers=remove_section_headers,
         skip_non_songs=skip_non_songs,
         excluded_terms=excluded_terms,
@@ -214,6 +212,7 @@ def match_to_dataset(search_queries: pa.Table):
         searchtext=normalize_titles(pl.col('song')) + ' ' + pl.col('artist'),
     )
 
+    log.info(f'Checking {search_queries.height} songs against the genius dataset')
     search_results = fuzzy_match(
         search_queries['searchtext'].unique(),
         genius_titles.select('searchtext').collect().to_series(),
@@ -284,6 +283,7 @@ def match_to_dataset_task():
         table_name='genius_matches',
         write_disposition='merge',
         primary_key=('song', 'artist'),
+        loader_file_format='parquet',
     )
 
     row_counts = pipeline.last_trace.last_normalize_info.row_counts or {}
@@ -301,7 +301,7 @@ def genius_search(tracks: pa.Table):
     Yields: Search result(s), no result will have null `g_id`
     """
 
-    def parse_genius_search_res(hits) -> pl.DataFrame:
+    def parse_genius_search_res(hits) -> pl.DataFrame|None:
         """
         Extract song info from genius search results.
         Return a dict, or None if there are no results
@@ -344,7 +344,6 @@ def genius_search(tracks: pa.Table):
 
     tracks: pl.DataFrame = (
         pl.from_arrow(tracks)
-        .drop(cs.starts_with('_dlt_'))
         .with_columns(
             searchtext=normalize_titles(pl.col('song')) + ' ' + pl.col('artist')
         )
@@ -367,13 +366,14 @@ def genius_search(tracks: pa.Table):
         res = genius.search_songs(track['searchtext'], per_page=5)
         search_results = parse_genius_search_res(res['hits'])
         if search_results is None:
+            log.warning(f'No search results for {track["song"]} by {track["artist"]}')
             yield no_result
             continue
         yield search_results.with_columns(
             pl.lit(track['song']).alias('song'),
             pl.lit(track['artist']).alias('artist'),
             pl.lit(track['searchtext']).alias('searchtext'),
-        ).to_arrow()
+        ).to_dicts()
 
 
 @task
@@ -399,6 +399,7 @@ def genius_search_task():
         dataset_name='lastfm',
         table_name='genius_searches',
         write_disposition='append',
+        loader_file_format='parquet',
     )
     row_counts = pipeline.last_trace.last_normalize_info.row_counts or {}
     log.info(f'row counts: {row_counts}')
@@ -444,7 +445,7 @@ def match_search_results(search_results: pa.Table):
         )
         if match_results[0, 'sim'] < FUZZY_MATCH_SIM_CUTOFF:
             no_match = search_results_this_song.select('song', 'artist').head(1)
-            yield no_match.to_arrow()
+            yield no_match.to_dicts()
             continue
         matches = (
             search_results_this_song.join(
@@ -487,6 +488,7 @@ def match_search_results_task():
         table_name='genius_matches',
         write_disposition='merge',
         primary_key=('song', 'artist'),
+        loader_file_format='parquet',
     )
     row_counts = pipeline.last_trace.last_normalize_info.row_counts or {}
     log.info(f'row counts: {row_counts}')
@@ -574,8 +576,10 @@ def get_song_metadata(songs):
                 f'{song_title} by {song_artist}',
             )
             continue
-
+        song = res['song']
+        log.debug(f'Song fields pre-trim: {list(song.keys())}')
         song = _trim_song_metadata(res['song'])
+        log.debug(f'Song fields post-trim: {list(song.keys())}')
         yield song
 
 
@@ -592,6 +596,8 @@ def get_song_metadata_task():
         'genius_song_meta',
         destination=dlt.destinations.postgres(),
         dataset_name='genius',
+        import_schema_path='schemas/import',
+        export_schema_path='schemas/export',
     )
     songs_to_search = sql_table(
         dlt.secrets['sources.postgres.credentials'],
@@ -605,6 +611,7 @@ def get_song_metadata_task():
         table_name='songs',
         write_disposition='merge',
         primary_key='id',
+        loader_file_format='parquet',
     )
     row_counts = pipeline.last_trace.last_normalize_info.row_counts or {}
     log.info(f'row counts: {row_counts}')
@@ -612,7 +619,7 @@ def get_song_metadata_task():
 
 
 @task
-def recheck_songs_incomplete_lyrics_task():
+def recheck_incomplete_songs_task():
     """
     Re-retrieve song metadata for songs not tagged as having complete lyrics.
     Write results to `genius.songs`
@@ -629,17 +636,14 @@ def recheck_songs_incomplete_lyrics_task():
         dlt.secrets['sources.postgres.credentials'],
         table='songs_incomplete',
         schema='genius',
+        included_columns=['id', 'title', 'primary_artist_names'],
         backend='connectorx',
         backend_kwargs={'conn': dlt.secrets['sources.postgres.credentials']},
     )
-
-    def remap_tbl_cols(t: pa.Table):
-        return t.select(['id', 'title', 'primary_artist_names']).rename_columns(
-            ['g_id', 'g_title', 'g_artist']
-        )
-
     pipeline.run(
-        songs_to_search.add_map(remap_tbl_cols) | get_song_metadata,
+        songs_to_search.add_map(
+            lambda t: t.rename_columns(['g_id', 'g_title', 'g_artist'])
+        ) | get_song_metadata,
         table_name='songs',
         write_disposition='merge',
         primary_key='id',
@@ -736,6 +740,8 @@ def get_lyrics_task():
     pipeline.run(
         songs_to_search | get_lyrics,
         table_name='lyrics',
+        loader_file_format='parquet',
+        primary_key='id',
     )
     row_counts = pipeline.last_trace.last_normalize_info.row_counts or {}
     log.info(f'row counts: {row_counts}')

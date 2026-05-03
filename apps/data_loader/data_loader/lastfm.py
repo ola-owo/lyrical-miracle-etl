@@ -97,7 +97,7 @@ def get_scrobbles():
     context = get_current_context()
     start_time = context['data_interval_start']
     end_time = context['data_interval_end']
-    log.info(f'Running task {context["ti"].run_id}')
+    log.debug(f'Running task {context["ti"].run_id}')
     log.info(f'Getting scrobbles from {start_time.date()} to {end_time.date()}')
 
     # pipeline = dlt.pipeline('scrobbles', destination=dlt.destinations.duckdb(), dataset_name='lastfm')
@@ -110,7 +110,7 @@ def get_scrobbles():
         .add_map(convert_uts)
         .add_map(fix_text_fields)
     )
-    pipeline.run(pipe, table_name='scrobbles')
+    pipeline.run(pipe, table_name='scrobbles', loader_file_format='parquet')
 
     row_counts = pipeline.last_trace.last_normalize_info.row_counts
     log.info(f'row counts: {row_counts}')

@@ -72,7 +72,7 @@ def spotify_recents(start_time: pn.DateTime = None, end_time: pn.DateTime = None
                 ),
             },
         ),
-        paginator=JSONResponseCursorPaginator(  # TODO: test this paginator
+        paginator=JSONResponseCursorPaginator(
             cursor_path='cursors.after',  # read next cursor from response JSON
             cursor_param='after',  # send it as ?after=...
         ),
