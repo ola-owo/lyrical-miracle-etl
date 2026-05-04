@@ -142,7 +142,7 @@ def fuzzy_match(
                 candidates,
                 processor=fuzz.utils.default_process,
                 dtype=np.uint8,
-                workers=-1,
+                workers=-1,  # -1 means all cores
                 scorer=scorer,
                 score_cutoff=cutoff,
             )
@@ -256,7 +256,7 @@ def match_to_dataset(search_queries: pa.Table):
         )
         .select('song', 'artist', cs.starts_with('g_'), 'match_score')
     )
-    return matches.collect().to_arrow()
+    return matches.collect().to_dicts()
 
 
 @task

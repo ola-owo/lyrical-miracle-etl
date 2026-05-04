@@ -104,13 +104,18 @@ def get_scrobbles():
     pipeline = dlt.pipeline(
         'scrobbles', destination=dlt.destinations.postgres(), dataset_name='lastfm'
     )
-    pipe = (
-        scrobbles(start_time, end_time)
-        .add_filter(filter_now_playing)
-        .add_map(convert_uts)
-        .add_map(fix_text_fields)
+    pipeline.run(
+        (
+            scrobbles(start_time, end_time)
+            .add_filter(filter_now_playing)
+            .add_map(convert_uts)
+            .add_map(fix_text_fields)
+        ),
+        table_name='scrobbles',
+        write_disposition='merge',
+        primary_key=('url','dt'),
+        loader_file_format='parquet',
     )
-    pipeline.run(pipe, table_name='scrobbles', loader_file_format='parquet')
 
     row_counts = pipeline.last_trace.last_normalize_info.row_counts
     log.info(f'row counts: {row_counts}')
