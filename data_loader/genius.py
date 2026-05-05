@@ -301,7 +301,7 @@ def genius_search(tracks: pa.Table):
     Yields: Search result(s), no result will have null `g_id`
     """
 
-    def parse_genius_search_res(hits) -> pl.DataFrame|None:
+    def parse_genius_search_res(hits) -> pl.DataFrame | None:
         """
         Extract song info from genius search results.
         Return a dict, or None if there are no results
@@ -342,11 +342,8 @@ def genius_search(tracks: pa.Table):
         log.info('no search queries given, exiting.')
         return
 
-    tracks: pl.DataFrame = (
-        pl.from_arrow(tracks)
-        .with_columns(
-            searchtext=normalize_titles(pl.col('song')) + ' ' + pl.col('artist')
-        )
+    tracks: pl.DataFrame = pl.from_arrow(tracks).with_columns(
+        searchtext=normalize_titles(pl.col('song')) + ' ' + pl.col('artist')
     )
 
     genius = make_genius_client()
@@ -643,7 +640,8 @@ def recheck_incomplete_songs_task():
     pipeline.run(
         songs_to_search.add_map(
             lambda t: t.rename_columns(['g_id', 'g_title', 'g_artist'])
-        ) | get_song_metadata,
+        )
+        | get_song_metadata,
         table_name='songs',
         write_disposition='merge',
         primary_key='id',

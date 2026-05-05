@@ -113,7 +113,7 @@ def get_scrobbles():
         ),
         table_name='scrobbles',
         write_disposition='merge',
-        primary_key=('url','dt'),
+        primary_key=('url', 'dt'),
         loader_file_format='parquet',
     )
 
