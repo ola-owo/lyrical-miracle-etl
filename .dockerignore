@@ -1,0 +1,15 @@
+.git
+.venv
+.mypy_cache
+.pytest_cache
+.ruff_cache
+__pycache__
+*.py[cod]
+
+.dlt/*
+!.dlt/config.toml
+
+data
+logs
+airflow.db
+standalone_admin_password.txt
