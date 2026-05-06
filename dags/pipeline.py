@@ -2,15 +2,15 @@ from airflow.sdk import dag
 import pendulum as pnd
 from airflow.sdk import CronDataIntervalTimetable
 
-from lastfm import get_scrobbles
-from genius import (
+from data_loader.lastfm import get_scrobbles
+from data_loader.genius import (
     match_to_dataset_task,
     genius_search_task,
     match_search_results_task,
     get_song_metadata_task,
     get_lyrics_task,
 )
-from embeddings import embed_lyrics_task
+from data_loader.embeddings import embed_lyrics_task
 
 
 @dag(

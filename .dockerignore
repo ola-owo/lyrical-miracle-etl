@@ -1,15 +1,18 @@
-.git
-.venv
-.mypy_cache
-.pytest_cache
-.ruff_cache
-__pycache__
+.gitignore
+.git/
+.venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+__pycache__/
 *.py[cod]
 
-.dlt/*
-!.dlt/config.toml
+.dlt/secrets.toml
+**/*.env
 
-data
-logs
+data/
+logs/
 airflow.db
-standalone_admin_password.txt
+
+*.md
+.codex/

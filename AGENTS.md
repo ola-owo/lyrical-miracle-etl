@@ -27,6 +27,8 @@ The actual python scripts are in `data_loader/`.
 - Run Python scripts through `uv` when possible
 - Run external python tools through `uvx` when possible
 - Prefer `Pathlib` over `os.path`
+- When adding or upgrading airflow, use the constraints file (fill in the the airflow and python version):
+  `https://raw.githubusercontent.com/apache/airflow/constraints-{AIRFLOW_VERSION}/constraints-{PYTHON_VERSION}.txt`
 
 # Sandbox mode
 

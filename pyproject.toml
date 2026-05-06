@@ -4,7 +4,7 @@ version = "0.1.0"
 requires-python = ">=3.14"
 dependencies = [
     "dlt[duckdb,postgres,sql-database]>=1.20.0",
-    "apache-airflow[celery,google,graphviz]==3.2.0",
+    "apache-airflow[google,graphviz]==3.2.0",
     "fsspec>=2025.12.0",
     "lyricsgenius>=3.7.0",
     "polars>=1.36.1",
@@ -14,14 +14,19 @@ dependencies = [
     "asyncpg>=0.31.0",
 ]
 
-[tool.uv.sources]
-data-loader = { workspace = true }
-
 [dependency-groups]
 dev = [
     "ipython>=9.8.0",
     "ruff>=0.14.10",
 ]
+
+[build-system]
+requires = ["uv_build>=0.11,<0.12"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "data_loader"
+module-root = ""
 
 [tool.ruff.format]
 quote-style = "single"

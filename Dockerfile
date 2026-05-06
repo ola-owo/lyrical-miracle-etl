@@ -1,32 +1,24 @@
 FROM apache/airflow:3.2.0-python3.14
 
-COPY --from=ghcr.io/astral-sh/uv:0.11.8 /uv /uvx /bin/
-
-ENV AIRFLOW_HOME=/opt/airflow \
+ENV \
+    AIRFLOW_HOME=/opt/airflow \
     AIRFLOW__CORE__DAGS_FOLDER=/opt/airflow/dags \
     AIRFLOW__CORE__LOAD_EXAMPLES=False \
     AIRFLOW__CORE__EXECUTOR=LocalExecutor \
-    PYTHONPATH=/opt/airflow/dags:/opt/airflow \
-    UV_CACHE_DIR=/tmp/uv-cache \
-    UV_LINK_MODE=copy \
-    PATH=/opt/airflow/.venv/bin:$PATH
+    UV_LINK_MODE=copy
 
 WORKDIR /opt/airflow
+COPY pyproject.toml uv.lock ./
+RUN uv venv --system-site-packages && uv sync -n --active --locked --no-dev --no-install-project
+COPY data_loader/ ./data_loader/
+RUN uv sync -n --active --locked
+
+COPY dags/ ./dags/
+COPY schemas/ ./schemas/
+COPY .dlt/ ./.dlt/
 
 USER root
-COPY --chown=airflow:0 docker/entrypoint.sh /entrypoint
-RUN chmod +x /entrypoint \
-    && mkdir -p /opt/airflow/.dlt \
-    && chown -R airflow:0 /opt/airflow/.dlt
-
+RUN chown -R airflow:0 .
 USER airflow
-COPY --chown=airflow:0 pyproject.toml uv.lock /opt/airflow/
-RUN uv sync --locked --no-dev --no-install-project
-
-COPY --chown=airflow:0 data_loader/ /opt/airflow/dags/
-COPY --chown=airflow:0 schemas/ /opt/airflow/schemas/
-COPY --chown=airflow:0 .dlt/config.toml /opt/airflow/.dlt/config.toml
 
 EXPOSE 8080
-ENTRYPOINT ["/entrypoint"]
-CMD ["airflow", "standalone"]
