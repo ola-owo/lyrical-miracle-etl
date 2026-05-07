@@ -4,7 +4,7 @@ version = "0.1.0"
 requires-python = ">=3.14"
 dependencies = [
     "dlt[duckdb,postgres,sql-database]>=1.20.0",
-    "apache-airflow[google,graphviz]==3.2.0",
+    "apache-airflow[google,graphviz]==3.2.1",
     "fsspec>=2025.12.0",
     "lyricsgenius>=3.7.0",
     "polars>=1.36.1",
