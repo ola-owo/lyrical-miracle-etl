@@ -4,9 +4,6 @@
 *.gz
 *.parquet
 
-# API keys
-keys/
-
 # Gitignore template below copied from:
 # https://github.com/github/gitignore/blob/main/Python.gitignore
 
