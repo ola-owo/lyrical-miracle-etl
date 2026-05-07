@@ -19,6 +19,8 @@ from dlt.sources.sql_database import sql_table
 from dlt.sources.helpers.requests.retry import Client
 from dlt.sources.helpers.requests import HTTPError
 
+from data_loader.dlt_utils import get_normalize_row_counts
+
 
 _genius_client_excluded_terms = [
     '(live)',
@@ -260,12 +262,12 @@ def match_to_dataset(search_queries: pa.Table):
 
 
 @task
-def match_to_dataset_task():
+def match_to_dataset_task() -> dict[str, int]:
     """
     Find newly added scrobbles and try to match them against the Genius dataset.
     Write the results to `lastfm.genius_matches`
 
-    Returns: number of loaded records
+    Returns: row counts for all normalized tables.
     """
     log = logging.getLogger('airflow.task')
     unsearched_songs = sql_table(
@@ -286,9 +288,9 @@ def match_to_dataset_task():
         loader_file_format='parquet',
     )
 
-    row_counts = pipeline.last_trace.last_normalize_info.row_counts or {}
+    row_counts = get_normalize_row_counts(pipeline)
     log.info(f'row counts: {row_counts}')
-    return row_counts.get('genius_matches', 0)
+    return row_counts
 
 
 @transformer
@@ -374,13 +376,13 @@ def genius_search(tracks: pa.Table):
 
 
 @task
-def genius_search_task():
+def genius_search_task() -> dict[str, int]:
     """
     Search Genius for any newly scrobbled songs.
     Songs that have already been searched in Genius are ignored.
     Write search results to `lastfm.genius_searches`
 
-    Returns: number of loaded records
+    Returns: row counts for all normalized tables.
     """
     log = logging.getLogger('airflow.task')
     pipeline = dlt.pipeline('genius_search', destination=dlt.destinations.postgres())
@@ -398,9 +400,9 @@ def genius_search_task():
         write_disposition='append',
         loader_file_format='parquet',
     )
-    row_counts = pipeline.last_trace.last_normalize_info.row_counts or {}
+    row_counts = get_normalize_row_counts(pipeline)
     log.info(f'row counts: {row_counts}')
-    return row_counts.get('genius_searches', 0)
+    return row_counts
 
 
 @transformer
@@ -462,12 +464,12 @@ def match_search_results(search_results: pa.Table):
 
 
 @task
-def match_search_results_task():
+def match_search_results_task() -> dict[str, int]:
     """
     Match scrobbles to their Genius search results.
     Write results to `lastfm.genius_matches`
 
-    Returns: number of loaded records
+    Returns: row counts for all normalized tables.
     """
     log = logging.getLogger('airflow.task')
     pipeline = dlt.pipeline(
@@ -487,9 +489,9 @@ def match_search_results_task():
         primary_key=('song', 'artist'),
         loader_file_format='parquet',
     )
-    row_counts = pipeline.last_trace.last_normalize_info.row_counts or {}
+    row_counts = get_normalize_row_counts(pipeline)
     log.info(f'row counts: {row_counts}')
-    return row_counts.get('genius_matches', 0)
+    return row_counts
 
 
 @transformer
@@ -581,12 +583,12 @@ def get_song_metadata(songs):
 
 
 @task
-def get_song_metadata_task():
+def get_song_metadata_task() -> dict[str, int]:
     """
     Get full song metadata for songs that don't already have it.
     Write results to `genius.songs`
 
-    Returns: number of loaded records
+    Returns: row counts for all normalized tables.
     """
     log = logging.getLogger('airflow.task')
     pipeline = dlt.pipeline(
@@ -610,18 +612,18 @@ def get_song_metadata_task():
         primary_key='id',
         loader_file_format='parquet',
     )
-    row_counts = pipeline.last_trace.last_normalize_info.row_counts or {}
+    row_counts = get_normalize_row_counts(pipeline)
     log.info(f'row counts: {row_counts}')
-    return row_counts.get('songs', 0)
+    return row_counts
 
 
 @task
-def recheck_incomplete_songs_task():
+def recheck_incomplete_songs_task() -> dict[str, int]:
     """
     Re-retrieve song metadata for songs not tagged as having complete lyrics.
     Write results to `genius.songs`
 
-    Returns: number of loaded records
+    Returns: row counts for all normalized tables.
     """
     log = logging.getLogger('airflow.task')
     pipeline = dlt.pipeline(
@@ -646,9 +648,9 @@ def recheck_incomplete_songs_task():
         write_disposition='merge',
         primary_key='id',
     )
-    row_counts = pipeline.last_trace.last_normalize_info.row_counts or {}
+    row_counts = get_normalize_row_counts(pipeline)
     log.info(f'row counts: {row_counts}')
-    return row_counts.get('songs', 0)
+    return row_counts
 
 
 @transformer
@@ -717,12 +719,12 @@ def get_lyrics(songs):
 
 
 @task
-def get_lyrics_task():
+def get_lyrics_task() -> dict[str, int]:
     """
     Get lyrics of newly added songs.
     Write results to `genius.lyrics`
 
-    Returns: number of loaded records
+    Returns: row counts for all normalized tables.
     """
     log = logging.getLogger('airflow.task')
     pipeline = dlt.pipeline(
@@ -741,6 +743,6 @@ def get_lyrics_task():
         loader_file_format='parquet',
         primary_key='id',
     )
-    row_counts = pipeline.last_trace.last_normalize_info.row_counts or {}
+    row_counts = get_normalize_row_counts(pipeline)
     log.info(f'row counts: {row_counts}')
-    return row_counts.get('lyrics', 0)
+    return row_counts

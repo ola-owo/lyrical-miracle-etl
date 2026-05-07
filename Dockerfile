@@ -13,7 +13,8 @@ RUN uv venv --system-site-packages && \
 COPY data_loader/ ./data_loader/
 RUN uv sync -n --active --locked
 
-COPY dags/ ./dags/
+ARG DAGS_FOLDER="airflow/dags"
+COPY ${DAGS_FOLDER} ./dags/
 COPY schemas/ ./schemas/
 COPY .dlt/ ./.dlt/
 

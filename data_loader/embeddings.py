@@ -23,6 +23,8 @@ import dlt
 from dlt import transformer, resource
 from dlt.sources.sql_database import sql_table
 
+from data_loader.dlt_utils import get_normalize_row_counts
+
 
 # gemini api batch limits
 MAX_JOB_SIZE = 100
@@ -30,6 +32,9 @@ MAX_CONCURRENT_JOBS = 100
 
 # recommended embedding sizes are 768, 1536, and 3072 (full size)
 EMBEDDING_DIM = 768
+
+# Airflow task limits
+MAX_EMBED_LYRICS_JOBS = 8
 
 
 class TaskTypesV1(StrEnum):
@@ -433,74 +438,6 @@ def retrieve_batch_inline_job(
         client.batches.delete(name=job.name)
 
 
-@task
-def embed_lyrics_json_task() -> int:
-    """
-    Get embeddings of newly added song lyrics.
-
-    Save active job info to `genius.lyrics_embed_jobs`,
-    and save embeddings to `genius.lyrics_embed`
-
-    :returns: the number of loaded records.
-    """
-    log = logging.getLogger('airflow.task')
-
-    gemini = _make_client()
-    n_active_jobs = len(gemini.batches.list())
-    n_jobs = MAX_CONCURRENT_JOBS - n_active_jobs
-
-    pipeline = dlt.pipeline(
-        'embed_lyrics',
-        # destination=dlt.destinations.postgres(),
-        dataset_name='genius',
-        destination=dlt.destinations.duckdb(),
-        dev_mode=True,
-    )
-
-    # check active jobs
-    if n_active_jobs > 0:
-        log.info(f'{n_active_jobs} jobs currently in the queue')
-        pipeline.run(
-            retrieve_all_batch_file_jobs(gemini, delete_finished=False),
-            table_name='lyrics_embed',
-            write_disposition='merge',
-            primary_key='id',
-            loader_file_format='parquet',
-        )
-
-    # submit new jobs
-    if n_jobs == 0:
-        log.warning(
-            'Maximum concurrent jobs limit reached, not submitting any new jobs'
-        )
-    else:
-        lyrics_to_embed = sql_table(
-            dlt.secrets['sources.postgres.credentials'],
-            table='lyrics_no_embed',
-            schema='genius',
-            included_columns=['id', 'lyrics'],
-            backend='connectorx',
-            chunk_size=MAX_JOB_SIZE,
-            backend_kwargs={
-                'conn': dlt.secrets['sources.postgres.credentials'],
-                'return_type': 'arrow_stream',
-            },
-        )
-        pipeline.run(
-            lyrics_to_embed.add_limit(2).add_map(
-                lambda t: t.rename_columns(['id', 'content'])
-            )
-            | submit_batch_file_job(disp_name='lyrics-batch-embed-file'),
-            table_name='lyrics_embed_jobs',
-            write_disposition='replace',
-            # primary_key='name',
-        )
-
-    row_counts = pipeline.last_trace.last_normalize_info.row_counts or {}
-    log.info(f'row counts: {row_counts}')
-    return row_counts.get('lyrics_embed', 0)
-
-
 def _load_normalized_package_to_duckdb(job_files: Iterable[Path], table, schema):
     schema = 'genius'
     table = 'lyrics_embed'
@@ -606,68 +543,91 @@ def _load_all_normalized(pipeline: dlt.Pipeline, table):
 
 
 @task
-def embed_lyrics_task() -> int:
+def embed_lyrics_extract_jobs() -> dict[str, int]:
+    """
+    Extract embeddings from completed batch jobs.
+
+    Returns:
+        row counts for all normalized tables.
+    """
     log = logging.getLogger('airflow.task')
     gemini = _make_client()
-    n_active_jobs = len(gemini.batches.list())
-    new_job_space = MAX_CONCURRENT_JOBS - n_active_jobs
+    n_active_jobs = len(gemini.batches.list()) > 0
 
     pipeline = dlt.pipeline(
         'embed_lyrics',
         destination=dlt.destinations.postgres(),
         dataset_name='genius',
-        # destination=dlt.destinations.duckdb(),
-        # dev_mode=True,
     )
 
-    # check active jobs
     if not n_active_jobs:
         log.debug('No active running jobs')
-    else:
-        log.info(f'Checking {n_active_jobs} jobs currently in the queue')
-        pipeline.extract(
-            retrieve_all_batch_file_jobs(gemini, delete_finished=True),
-            table_name='lyrics_embed',
-            write_disposition='merge',
-            primary_key='id',
-            loader_file_format='parquet',
-        )
-        pipeline.normalize()
-        _load_all_normalized(pipeline, 'lyrics_embed')
+        return {}
 
-    # submit new jobs
-    if not new_job_space:
-        log.warning(
-            'Maximum concurrent jobs limit reached, not submitting any new jobs'
-        )
-    else:
-        lyrics_to_embed = sql_table(
-            dlt.secrets['sources.postgres.credentials'],
-            table='lyrics_no_embed',
-            schema='genius',
-            included_columns=['id', 'lyrics'],
-            backend='connectorx',
-            chunk_size=MAX_JOB_SIZE,
-            backend_kwargs={
-                'conn': dlt.secrets['sources.postgres.credentials'],
-                'return_type': 'arrow_stream',
-            },
-        )
-        pipeline.run(
-            lyrics_to_embed.add_limit(10).add_map(
-                lambda t: t.rename_columns(['id', 'content'])
-            )
-            | submit_batch_file_job(disp_name='lyrics-batch-embed-file'),
-            table_name='lyrics_embed_jobs',
-            write_disposition='replace',
-            primary_key='name',
-            loader_file_format='parquet',
-        )
-
-    row_counts = pipeline.last_trace.last_normalize_info.row_counts or {}
+    log.info(f'Checking {n_active_jobs} jobs currently in the queue')
+    pipeline.extract(
+        retrieve_all_batch_file_jobs(gemini, delete_finished=True),
+        table_name='lyrics_embed',
+        write_disposition='merge',
+        primary_key='id',
+        loader_file_format='parquet',
+    )
+    pipeline.normalize()
+    _load_all_normalized(pipeline, 'lyrics_embed')
+    row_counts = get_normalize_row_counts(pipeline)
     log.info(f'row counts: {row_counts}')
-    return row_counts.get('lyrics_embed', 0)
+    return row_counts
 
 
-if __name__ == '__main__':
-    embed_lyrics_task.function()
+@task
+def embed_lyrics_submit_jobs(n_job_slots=MAX_EMBED_LYRICS_JOBS) -> dict[str, int]:
+    """
+    Submit new lyrics embedding batch jobs.
+
+    Returns:
+        row counts for all normalized tables.
+    """
+    log = logging.getLogger('airflow.task')
+    assert n_job_slots <= MAX_CONCURRENT_JOBS
+    gemini = _make_client()
+    n_active_jobs = len(gemini.batches.list()) > 0
+
+    pipeline = dlt.pipeline(
+        'embed_lyrics',
+        destination=dlt.destinations.postgres(),
+        dataset_name='genius',
+    )
+
+    n_active_jobs = len(gemini.batches.list())
+    n_new_jobs = n_job_slots - n_active_jobs
+    if n_new_jobs <= 0:
+        log.warning('Concurrent jobs limit reached, not submitting any new jobs')
+        return {}
+
+    lyrics_to_embed = sql_table(
+        dlt.secrets['sources.postgres.credentials'],
+        table='lyrics_no_embed',
+        schema='genius',
+        included_columns=['id', 'lyrics'],
+        backend='connectorx',
+        chunk_size=MAX_JOB_SIZE,
+        backend_kwargs={
+            'conn': dlt.secrets['sources.postgres.credentials'],
+            'return_type': 'arrow_stream',
+        },
+    )
+    pipeline.run(
+        (
+            lyrics_to_embed
+            .add_limit(n_new_jobs)
+            .add_map(lambda t: t.rename_columns(['id', 'content']))
+            | submit_batch_file_job(disp_name='lyrics-batch-embed-file')
+        ),
+        table_name='lyrics_embed_jobs',
+        write_disposition='replace',
+        primary_key='name',
+        loader_file_format='parquet',
+    )
+    row_counts = get_normalize_row_counts(pipeline)
+    log.info(f'row counts: {row_counts}')
+    return row_counts

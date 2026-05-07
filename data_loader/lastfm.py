@@ -9,6 +9,8 @@ from dlt.sources.helpers.rest_client import RESTClient
 from dlt.sources.helpers.rest_client.paginators import PageNumberPaginator
 from dlt.sources.helpers.rest_client.auth import APIKeyAuth
 
+from data_loader.dlt_utils import get_normalize_row_counts
+
 MAX_TRACKS_PER_REQUEST = 1000
 
 
@@ -92,7 +94,7 @@ def test_pipeline():
 
 
 @task()
-def get_scrobbles():
+def get_scrobbles() -> dict[str, int]:
     log = logging.getLogger('airflow.task')
     context = get_current_context()
     start_time = context['data_interval_start']
@@ -100,7 +102,6 @@ def get_scrobbles():
     log.debug(f'Running task {context["ti"].run_id}')
     log.info(f'Getting scrobbles from {start_time.date()} to {end_time.date()}')
 
-    # pipeline = dlt.pipeline('scrobbles', destination=dlt.destinations.duckdb(), dataset_name='lastfm')
     pipeline = dlt.pipeline(
         'scrobbles', destination=dlt.destinations.postgres(), dataset_name='lastfm'
     )
@@ -117,11 +118,6 @@ def get_scrobbles():
         loader_file_format='parquet',
     )
 
-    row_counts = pipeline.last_trace.last_normalize_info.row_counts
+    row_counts = get_normalize_row_counts(pipeline)
     log.info(f'row counts: {row_counts}')
-    return row_counts.get('scrobbles', 0)
-
-
-if __name__ == '__main__':
-    load_info = test_pipeline()
-    print(load_info)
+    return row_counts

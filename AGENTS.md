@@ -6,10 +6,10 @@ and processes it for downstream analyses.
 # Tech stack
 
 - airflow: pipeline orchestration
-- [dlt](https://dlthub.com/docs/llms.txt): data extraction, transformation, and loading
-- [neon](https://neon.com/docs/llms.txt): postgresql database for storing pipeline data
-- polars and pyarrow: dataframe manipulation
-- sqlalchemy and psycopg2: storing/loading pipeline data from postgres
+- [`dlt`](https://dlthub.com/docs/llms.txt): data extraction, transformation, and loading
+- [`neon`](https://neon.com/docs/llms.txt): postgresql database, contains pipeline data and airflow metadata
+- `polars` and `pyarrow`: dataframe manipulation
+- `sqlalchemy` and `psycopg2`: storing/loading pipeline data from postgres
 - duckdb: storing/loading data locally when testing
 
 # Project layout
