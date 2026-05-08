@@ -34,7 +34,7 @@ MAX_CONCURRENT_JOBS = 100
 EMBEDDING_DIM = 768
 
 # Airflow task limits
-MAX_EMBED_LYRICS_JOBS = 8
+MAX_EMBED_LYRICS_JOBS = 10  # above 10 tends to cause 429s
 
 
 class TaskTypesV1(StrEnum):
@@ -78,6 +78,26 @@ def _check_batch_inputs(texts: pl.DataFrame):
     if n_null > 0:
         log.error(f'Batch input has {n_null} null value(s)')
         raise ValueError('Null batch inputs detected')
+
+
+def build_prompt(content: pl.Expr, title: pl.Expr = pl.lit('none'), task: TaskTypesV2 = None):
+    """
+    Build an embedding prompt to be passed to `gemini-embedding-2`
+
+    [Gemini reference](https://ai.google.dev/gemini-api/docs/embeddings#task-types)
+
+    Args:
+        content: document text
+        title: document title
+        task: task type
+    """
+    content = content.str.replace_all('|', '', literal=True)
+    title = title.str.replace_all('|', '', literal=True)
+    if task:
+        task = TaskTypesV2(task)  # will ValueError if task is invalid
+        return pl.format(f'task: {task} | query: {{}}', content)
+    else:
+        return pl.format('title: {} | text: {}', title, content)
 
 
 def _poll_job_state(job_name: str, client: Client):
@@ -142,7 +162,7 @@ def batch_embed_inline(
 
     client = client or _make_client()
     job = client.batches.create_embeddings(
-        model='gemini-embedding-001',
+        model='gemini-embedding-2',
         src={
             'inlined_requests': {
                 'config': {'output_dimensionality': dim},
@@ -171,7 +191,11 @@ def batch_embed_inline(
 
 @transformer
 def submit_batch_file_job(
-    texts, client=None, disp_name='batch-embedding-inline', dim=EMBEDDING_DIM
+    texts: pa.Table,
+    client: Client = None,
+    task: TaskTypesV2 = None,
+    disp_name='batch-embedding-inline',
+    dim=EMBEDDING_DIM
 ):
     """
     Submit a batch embedding job using Files API and gemini-embedding-2 model
@@ -184,13 +208,15 @@ def submit_batch_file_job(
     :param texts: input table
     :param client: gemini API client
     :param disp_name: job display name
+    :param task: Embedding task type.
+      If set, format prompt(s) as `task: {} | query: {}`
+      If unset, format as `title: {} | text: {}`
     :param dim: embedding size
 
     :return: the submitted job
     """
     log = logging.getLogger(__name__)
-    # log = logging.getLogger('dlt')
-    texts = pl.from_arrow(texts)
+    texts: pl.DataFrame = pl.from_arrow(texts)
     if texts.height == 0:
         log.warning('Nothing to embed, exiting.')
         return
@@ -198,14 +224,12 @@ def submit_batch_file_job(
 
     texts = (
         texts.with_columns(title=pl.coalesce('^title$', pl.lit('none')))
-        .with_columns(pl.col('title', 'content').str.replace_all('|', '', literal=True))
-        .with_columns(prompt=pl.format('title: {} | text: {}', 'title', 'content'))
+        .with_columns(prompt=build_prompt(pl.col('content'), pl.col('title'), task))
     )
 
     client = client or _make_client()
 
-    # create file with embedding requests,
-    # then upload it to gemini files api
+    # create file with embedding requests, then upload it to gemini files api
     TEMP_FILE = 'memory:///batch.jsonl'
     reqs = (
         {
