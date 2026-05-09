@@ -21,6 +21,7 @@ from dlt.sources.helpers.requests import HTTPError
 
 from data_loader.dlt_utils import get_normalize_row_counts
 
+SONG_DATASET = Path('/data/genius-dset.parquet')
 
 _genius_client_excluded_terms = [
     '(live)',
@@ -192,7 +193,6 @@ def match_to_dataset(search_queries: pa.Table):
     :param search_queries: table with `song` and `artist` columns
     """
     FUZZY_MATCH_SIM_CUTOFF = 96  # from visual inspection of a recent sample
-    SONG_DATASET = Path('data/genius-no-lyrics.parquet')
 
     log = logging.getLogger('dlt')
     if search_queries.num_rows == 0:

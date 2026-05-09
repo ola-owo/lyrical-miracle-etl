@@ -16,7 +16,7 @@ for downstream analyses.
 1. `get_lyrics`: Retrieve song lyrics from Genius
 1. `embed_lyrics`: Convert lyrics to embeddings using Gemini
 
-Results of each task in are saved to a Neon database.
+Results of each task in are saved to a postgresql database.
 
 # How to run
 
@@ -27,35 +27,37 @@ Build the image:
 
 ```sh
 docker build -t lyric-analyzer-etl .
+docker volume create airflow-logs
 ```
+
+Start the container:
 
 ```sh
-# Run with Airflow's default local SQLite metadata database:
-docker run --rm -it -p 8080:8080 lyric-analyzer-etl
-
-# Run with an external Airflow metadata database:
 docker run --rm -it -p 8080:8080 \
-  -e AIRFLOW__DATABASE__SQL_ALCHEMY_CONN='MY_DATABASE_URI' \
-  lyric-analyzer-etl
+  --env-file .env \
+  --mount type=volume,src=airflow-logs,dst=/opt/airflow/logs \
+  --mount type=bind,src=$(pwd)/data,dst=/data,ro \
+  lyrical-miracle-etl standalone
 ```
 
-API keys are handled by dlt's [credential mechanism](https://dlthub.com/docs/general-usage/credentials)
-When running locally, you'd normally place all your keys in `.dlt/secrets.toml`.
-When running through Docker, it's easier to pass the keys as environment variables when starting the container.
+The `.env` file should contain your Airflow config variables, dlt configs, and dlt secrets.
 For example:
 
 ```sh
-# contents of .env:
-DESTINATION__POSTGRES__CREDENTIALS=...
-SOURCES__POSTGRES__CREDENTIALS=...
+# airflow:
+AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql://airflow:airflow@my.database.server/airflow_metadata
+
+# dlt:
+RUNTIME__LOG_LEVEL=WARNING
+DESTINATION__POSTGRES__CREDENTIALS=postgresql://user:pass@my.database.server/lyrics
+SOURCES__POSTGRES__CREDENTIALS=postgresql://user:pass@my.database.server/lyrics
 SOURCES__LASTFM__API_KEY=...
 SOURCES__LASTFM__USER=...
 SOURCES__GENIUS__TOKEN=...
 SOURCES__GEMINI__API_KEY=...
-
-
-docker run --env-file .env [...]
 ```
 
-For persistent Airflow logs and the local SQLite metadata database, mount a
-volume at `/opt/airflow` or mount narrower paths such as `/opt/airflow/logs`.
+API keys in `.env` are detected by dlt's
+[credential mechanism](https://dlthub.com/docs/general-usage/credentials).
+When running locally, you'd normally place all your keys in `.dlt/secrets.toml`.
+But with Docker, it's easier to pass them as environment variables at runtime.
