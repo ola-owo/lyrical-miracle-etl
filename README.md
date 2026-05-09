@@ -1,13 +1,9 @@
-~~~
-title: lyrical-miracle-etl
-~~~
-
 # Summary
 
 This is an ETL pipeline that pulls my recent LastFM listening history and processes it
 for downstream analyses.
 
-# Pipeline description
+# Pipeline breakdown
 
 1. `get_scrobbles`: Get the past week's scrobbles from LastFM
 1. `match_to_dataset`: Match scrobbles to the cached Genius song dataset
