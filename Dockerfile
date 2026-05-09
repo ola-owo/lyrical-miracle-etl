@@ -4,6 +4,7 @@ ENV AIRFLOW_HOME=/opt/airflow \
     AIRFLOW__CORE__DAGS_FOLDER=${AIRFLOW_HOME}/dags \
     AIRFLOW__CORE__LOAD_EXAMPLES=False \
     AIRFLOW__CORE__EXECUTOR=LocalExecutor \
+    AIRFLOW__LOGGING__BASE_LOG_FOLDER=${AIRFLOW_HOME}/logs \
     UV_LINK_MODE=copy
 
 WORKDIR ${AIRFLOW_HOME}
@@ -19,7 +20,10 @@ COPY schemas/ ./schemas/
 COPY .dlt/ ./.dlt/
 
 USER root
-RUN chown -R airflow:0 .
+RUN mkdir -p logs && \
+    chown -R airflow:0 .
 USER airflow
+
+VOLUME ["${AIRFLOW__LOGGING__BASE_LOG_FOLDER}"]
 
 EXPOSE 8080
