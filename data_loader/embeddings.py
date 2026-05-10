@@ -5,6 +5,7 @@ from enum import StrEnum
 from io import StringIO
 from typing import Iterable
 from pathlib import Path
+from warnings import deprecated
 
 import pyarrow as pa
 import polars as pl
@@ -18,9 +19,9 @@ from google.genai import Client
 from google.genai.types import BatchJob, JobState
 from google.genai.errors import ClientError
 
-from airflow.sdk import task
+from airflow.sdk import task, task_group
 import dlt
-from dlt import transformer, resource
+from dlt import transformer
 from dlt.sources.sql_database import sql_table
 
 from data_loader.dlt_utils import get_normalize_row_counts
@@ -34,9 +35,10 @@ MAX_CONCURRENT_JOBS = 100
 EMBEDDING_DIM = 768
 
 # Airflow task limits
-MAX_EMBED_LYRICS_JOBS = 10  # above 10 tends to cause 429s
+MAX_EMBED_LYRICS_JOBS = 5  # above 10 tends to cause 429s
 
 
+@deprecated('gemini-embedding-001 model is deprecated')
 class TaskTypesV1(StrEnum):
     """gemini-embedding-001 task types"""
 
@@ -50,7 +52,7 @@ class TaskTypesV1(StrEnum):
     FACT_VERIFICATION = 'FACT_VERIFICATION'
 
 
-class TaskTypesV2(StrEnum):
+class EmbeddingTask(StrEnum):
     """gemini-embedding-2 task types"""
 
     # asymmetric:
@@ -62,6 +64,22 @@ class TaskTypesV2(StrEnum):
     CLASSIFICATION = 'classification'
     CLUSTERING = 'clustering'
     SEMANTIC_SIMILARITY = 'sentence similarity'
+
+
+# table names
+DB_SCHEMA = 'genius'
+EMBEDDING_JOB_TABLES = {
+    EmbeddingTask.CLUSTERING: 'lyrics_embed_clustering_jobs',
+    None: 'lyrics_embed_jobs',
+}
+EMBEDDING_TABLES = {
+    EmbeddingTask.CLUSTERING: 'lyrics_embed_clustering',
+    None: 'lyrics_embed',
+}
+EMBEDDING_LYRICS_TABLES = {
+    EmbeddingTask.CLUSTERING: 'lyrics_no_embed_clustering',
+    None: 'lyrics_no_embed',
+}
 
 
 def _make_client(api_key=dlt.secrets['sources.gemini.api_key']) -> Client:
@@ -80,7 +98,9 @@ def _check_batch_inputs(texts: pl.DataFrame):
         raise ValueError('Null batch inputs detected')
 
 
-def build_prompt(content: pl.Expr, title: pl.Expr = pl.lit('none'), task: TaskTypesV2 = None):
+def _build_prompt(
+    content: pl.Expr, title: pl.Expr = pl.lit('none'), task: EmbeddingTask = None
+):
     """
     Build an embedding prompt to be passed to `gemini-embedding-2`
 
@@ -94,20 +114,20 @@ def build_prompt(content: pl.Expr, title: pl.Expr = pl.lit('none'), task: TaskTy
     content = content.str.replace_all('|', '', literal=True)
     title = title.str.replace_all('|', '', literal=True)
     if task:
-        task = TaskTypesV2(task)  # will ValueError if task is invalid
+        task = EmbeddingTask(task)  # will ValueError if task is invalid
         return pl.format(f'task: {task} | query: {{}}', content)
     else:
         return pl.format('title: {} | text: {}', title, content)
 
 
-def _poll_job_state(job_name: str, client: Client):
-    while True:
-        yield client.batches.get(name=job_name)
-
-
 def _wait_for_job(job_name: str, client: Client, wait_time=60) -> BatchJob:
     """Wait for batch job to finish, then return the finished job"""
     log = logging.getLogger(__name__)
+
+    def _poll_job_state(job_name: str, client: Client):
+        while True:
+            yield client.batches.get(name=job_name)
+
     for job in tqdm(
         _poll_job_state(job_name, client),
         'waiting for batch job',
@@ -133,9 +153,72 @@ def _wait_for_job(job_name: str, client: Client, wait_time=60) -> BatchJob:
         return job
 
 
+def _job_to_dict(job: BatchJob) -> dict:
+    job_dict = job.__dict__.copy()
+    job_dict.pop('dest', None)
+    return job_dict
+
+
+def _extract_from_batch_file(
+    job_name: str, client: Client = None, delete_finished=False
+):
+    """
+    Check a background batch embeddings job.
+    If it's finished, return the embeddings as a table (id, embedding)
+    If not finished, return None
+
+    :param job_name: name of the job to check
+    :param gemini: Gemini API client
+    :param delete_finished: delete completed job after extracting embeddings (default False)
+
+    :returns: `pyarrow.Table` with columns `(id, embedding)`
+    """
+    log = logging.getLogger(__name__)
+    client = client or _make_client()
+
+    job = client.batches.get(name=job_name)
+    emb: pa.Table = None
+    if job.state == JobState.JOB_STATE_SUCCEEDED:
+        log.info(f'Job {job.name} completed')
+        if not job.dest:
+            log.error('Job destination is blank!')
+            return
+        if job.dest.inlined_embed_content_responses and not job.dest.file_name:
+            log.warning('This is an inline job, not file-based (skipping)')
+            return
+        res = client.files.download(file=job.dest.file_name)
+        emb = pl.read_ndjson(StringIO(res.decode())).select(
+            id=pl.col('key'),
+            embedding=pl.col('response')
+            .struct['embedding']
+            .struct['values']
+            .cast(pl.List(pl.Float64())),
+        )
+        emb = emb.to_arrow()
+    elif job.state in (JobState.JOB_STATE_PENDING, JobState.JOB_STATE_RUNNING):
+        log.info(f'Job {job.name} in progress... ({job.state.name})')
+    elif job.state.name == JobState.JOB_STATE_CANCELLED:
+        log.warning(f'Job {job.name} CANCELLED')
+    elif job.state.name == JobState.JOB_STATE_FAILED:
+        log.error(f'Job {job.name} FAILED:')
+        log.error(job.error)
+    else:
+        log.error(f'Job {job.name} unknown state: {job.state.name}')
+        return
+
+    if delete_finished and job.state not in (
+        JobState.JOB_STATE_PENDING,
+        JobState.JOB_STATE_RUNNING,
+    ):
+        log.info(f'Deleting job {job.name} from the queue')
+        client.batches.delete(name=job.name)
+
+    return emb
+
+
 @transformer
 def batch_embed_inline(
-    texts, client: Client = None, disp_name='batch-embedding-inline', dim=EMBEDDING_DIM
+    texts, client: Client = None, disp_name='batch-inline-embedding', dim=EMBEDDING_DIM
 ):
     """
     Get embeddings of given song lyrics using Gemini batch embedding API,
@@ -193,10 +276,10 @@ def batch_embed_inline(
 def submit_batch_file_job(
     texts: pa.Table,
     client: Client = None,
-    task: TaskTypesV2 = None,
-    disp_name='batch-embedding-inline',
-    dim=EMBEDDING_DIM
-):
+    task: EmbeddingTask = None,
+    disp_name='batch-file-embedding',
+    dim=EMBEDDING_DIM,
+) -> dict:
     """
     Submit a batch embedding job using Files API and gemini-embedding-2 model
 
@@ -222,10 +305,9 @@ def submit_batch_file_job(
         return
     _check_batch_inputs(texts)
 
-    texts = (
-        texts.with_columns(title=pl.coalesce('^title$', pl.lit('none')))
-        .with_columns(prompt=build_prompt(pl.col('content'), pl.col('title'), task))
-    )
+    texts = texts.with_columns(
+        title=pl.coalesce('^title$', pl.lit('none'))
+    ).with_columns(prompt=_build_prompt(pl.col('content'), pl.col('title'), task))
 
     client = client or _make_client()
 
@@ -258,65 +340,11 @@ def submit_batch_file_job(
         log.error(f'Gemini client error: {e}')
         return
     log.info(f'Submitted {texts.height} requests to job: {job.name}')
-    job_dict = job.__dict__.copy()
-    job_dict.pop('dest', None)
-    return job_dict
+    return _job_to_dict(job)
 
 
-def _parse_batch_file_job(job_name: str, client: Client = None, delete_finished=False):
-    """
-    Check a background batch embeddings job.
-    If it's finished, return the embeddings as a table (id, embedding)
-    If not finished, return None
-
-    :param job_name: name of the job to check
-    :param gemini: Gemini API client
-    :param delete_finished: delete completed job after extracting embeddings (default True)
-
-    :returns: yields `pyarrow.Table` with columns `(id, embedding)`
-    """
-    log = logging.getLogger(__name__)
-    client = client or _make_client()
-
-    job = client.batches.get(name=job_name)
-    if job.state == JobState.JOB_STATE_SUCCEEDED:
-        log.info(f'Job {job.name} completed')
-        if not job.dest:
-            log.error('Job destination is blank!')
-            return
-        if job.dest.inlined_embed_content_responses and not job.dest.file_name:
-            log.warning('This is an inline job, not file-based (skipping)')
-            return
-        res = client.files.download(file=job.dest.file_name)
-        emb = pl.read_ndjson(StringIO(res.decode())).select(
-            id=pl.col('key'),
-            embedding=pl.col('response')
-            .struct['embedding']
-            .struct['values']
-            .cast(pl.List(pl.Float64())),
-        )
-        yield emb.to_arrow()
-    elif job.state in (JobState.JOB_STATE_PENDING, JobState.JOB_STATE_RUNNING):
-        log.info(f'Job {job.name} in progress... ({job.state.name})')
-    elif job.state.name == JobState.JOB_STATE_CANCELLED:
-        log.warning(f'Job {job.name} CANCELLED')
-    elif job.state.name == JobState.JOB_STATE_FAILED:
-        log.error(f'Job {job.name} FAILED:')
-        log.error(job.error)
-    else:
-        log.error(f'Job {job.name} unknown state: {job.state.name}')
-        return
-
-    if delete_finished and job.state not in (
-        JobState.JOB_STATE_PENDING,
-        JobState.JOB_STATE_RUNNING,
-    ):
-        log.info(f'Deleting job {job.name} from the queue')
-        client.batches.delete(name=job.name)
-
-
-@resource
-def retrieve_batch_file_job(job_name: str, client: Client = None, delete_finished=True):
+@transformer
+def retrieve_batch_file_job(jobs, client: Client = None, delete_finished=True):
     """
     Check a background batch embeddings job.
     If it's finished, return the embeddings as a table (id, embedding)
@@ -329,25 +357,16 @@ def retrieve_batch_file_job(job_name: str, client: Client = None, delete_finishe
     :returns: Table with columns `(id, embedding)`
     """
     client = client or _make_client()
-    job = client.batches.get(name=job_name)
-    yield from _parse_batch_file_job(job.name, client, delete_finished)
+    for job in jobs:
+        emb = _extract_from_batch_file(
+            job['name'], client, delete_finished=delete_finished
+        )
+        if emb:
+            yield emb
 
 
-@resource
-def retrieve_all_batch_file_jobs(client: Client = None, delete_finished=True):
-    """
-    Run `batch_embed_file_retrieve` on all jobs in the queue
-
-    :param gemini: Gemini API client
-    :param delete_finished: delete completed job after extracting (default True)
-    """
-    client = client or _make_client()
-    for job in client.batches.list():
-        yield _parse_batch_file_job(job.name, client, delete_finished)
-
-
-@resource
-def refresh_all_batch_jobs(client: Client = None):
+@transformer
+def refresh_batch_jobs(jobs: list[dict], client: Client = None):
     """
     Refresh the state of all queued jobs
 
@@ -355,14 +374,19 @@ def refresh_all_batch_jobs(client: Client = None):
     :returns: Job state, excluding `dest`
     :rtype: dict
     """
+    log = logging.getLogger(__name__)
     client = client or _make_client()
-    for job in client.batches.list():
-        job_dict = job.__dict__.copy()
-        job_dict.pop('dest', None)
-        yield job_dict
+    for job in jobs:
+        try:
+            newjob = client.batches.get(name=job['name'])
+        except ClientError as e:
+            log.error(f'Could not refresh batch job {job["name"]}: {e}')
+        else:
+            yield _job_to_dict(newjob)
 
 
 @transformer
+@deprecated('gemini-embedding-001 model is deprecated')
 def batch_embed_v1(
     texts,
     client: Client = None,
@@ -424,47 +448,10 @@ def batch_embed_v1(
     )
 
 
-@transformer
-def retrieve_batch_inline_job(
-    job_name: BatchJob, ids: list[str], client: Client, delete_finished=True
-):
+def _load_embeddings_to_duckdb(job_files: Iterable[Path], table, schema):
     """
-    Retrieve embeddings from a batch inline job.
-    If the job's not finished, return None
-
-    :param job_name: name of the job to retrieve
-    :param ids: ids of batch job queries
-    :client: Gemini API client
-    :delete_finished: delete completed job after extracting (default True)
-
-    :returns: Table with columns `(id, embedding)`
+    Load normalized lyrics embeddings package to duckdb
     """
-    log = logging.getLogger('dlt')
-    client = client or _make_client()
-    job = client.batches.get(name=job_name)  # get full job with output data
-    if job.state != JobState.JOB_STATE_SUCCEEDED:
-        log.warning(f'Job {job.name} is incomplete: {job.state.name}')
-        return
-    resp = job.dest.inlined_embed_content_responses
-    embeddings = (r.response.embedding.values for r in resp)
-    yield pa.Table.from_arrays(
-        [
-            ids,
-            pa.array(embeddings, type=pa.list_(pa.float64(), EMBEDDING_DIM)),
-        ],
-        names=['id', 'embedding'],
-    )
-    if delete_finished and job.state not in (
-        JobState.JOB_STATE_PENDING,
-        JobState.JOB_STATE_RUNNING,
-    ):
-        log.info(f'Deleting job {job.name} from the queue')
-        client.batches.delete(name=job.name)
-
-
-def _load_normalized_package_to_duckdb(job_files: Iterable[Path], table, schema):
-    schema = 'genius'
-    table = 'lyrics_embed'
     table_full_name = f'"{schema}"."{table}"'
 
     load_df = pl.read_parquet(job_files)
@@ -475,12 +462,14 @@ def _load_normalized_package_to_duckdb(job_files: Iterable[Path], table, schema)
         cxn.execute(
             f'CREATE TABLE IF NOT EXISTS {table_full_name} (id bigint primary key, embedding double[])'
         )
-        cxn.execute(f'INSERT OR REPLACE INTO {table_full_name} SELECT * FROM "load_df"')
+        cxn.execute(
+            f'INSERT OR REPLACE INTO {table_full_name} SELECT id, embedding FROM "load_df"'
+        )
         cxn.commit()  # TODO: check data before committing
 
 
-def _load_normalized_package_to_pg(
-    job_files: Path | Iterable[Path], table, schema, staging_schema=None
+def _load_embeddings_to_pg(
+    job_files: Iterable[Path], table, schema, staging_schema=None
 ):
     """
     Load normalized data into postgres
@@ -525,19 +514,22 @@ def _load_normalized_package_to_pg(
         cxn.commit()
 
 
-def _load_all_normalized(pipeline: dlt.Pipeline, table):
+def _load_all_normalized(pipeline: dlt.Pipeline, tables, clear_after_load=True):
     """
     Load all normalized data into the pipeline's destination
 
     Args:
         pipeline: dlt pipeline
         table: name of table to load into
+        clear_after_load: clear the job from the queue after loading it
     """
     log = logging.getLogger(__name__)
+    if isinstance(tables, str):
+        tables = [tables]
     if pipeline.destination.destination_type == 'dlt.destinations.duckdb':
-        load_fn = _load_normalized_package_to_duckdb
+        load_fn = _load_embeddings_to_duckdb
     elif pipeline.destination.destination_type == 'dlt.destinations.postgres':
-        load_fn = _load_normalized_package_to_pg
+        load_fn = _load_embeddings_to_pg
     else:
         raise NotImplementedError(
             'Unsupported destination type:', pipeline.destination.destination_type
@@ -549,25 +541,71 @@ def _load_all_normalized(pipeline: dlt.Pipeline, table):
         load_pkg_dir = Path(pipeline.working_dir).joinpath(
             'load', 'normalized', load_id, 'new_jobs'
         )
-        job_files = sorted(
-            f for f in load_pkg_dir.glob('*.parquet') if f.name.startswith(table)
-        )
-        log.debug(f'Files to load: {job_files}')
         if not load_pkg_dir.exists():
             raise RuntimeError(
                 f'No new load jobs found for {pipeline.pipeline_name} job {load_id}'
             )
-        if not job_files:
-            raise RuntimeError('No normalized parquet files found for `lyrics_embed`')
-        load_fn(job_files, table=table, schema=pipeline.dataset_name)
-        log.debug(f'Clearing package {load_id} from load queue')
-        load_storage.complete_load_package(
-            load_id, aborted=False
-        )  # remove package from load queue
+        for table in tables:
+            job_files = sorted(load_pkg_dir.glob(f'{table}.*.parquet'))
+            if any(job_files):
+                log.debug(f'Files to load: {job_files}')
+                load_fn(job_files, table=table, schema=pipeline.dataset_name)
+            else:
+                log.warning('No normalized parquet files found for `lyrics_embed`')
+
+        if clear_after_load:
+            log.debug(f'Clearing package {load_id} from load queue')
+            load_storage.complete_load_package(load_id, aborted=False)
 
 
 @task
-def embed_lyrics_extract_jobs() -> dict[str, int]:
+def embed_lyrics_refresh_task(embed_task: EmbeddingTask) -> dict[str, int]:
+    log = logging.getLogger('airflow.task')
+    gemini = _make_client()
+
+    try:
+        jobs_table = EMBEDDING_JOB_TABLES[embed_task]
+    except KeyError as e:
+        raise NotImplementedError(
+            f'No batch embedding tables configured for task {embed_task}. '
+        ) from e
+
+    pipeline_name = 'embed_lyrics'
+    if embed_task:
+        pipeline_name += '-' + embed_task.replace(' ', '_')
+    pipeline = dlt.pipeline(
+        pipeline_name,
+        dataset_name=DB_SCHEMA,
+        destination=dlt.destinations.postgres(),
+        # destination=dlt.destinations.duckdb(),
+        # dev_mode=True,
+    )
+
+    active_jobs = sql_table(
+        dlt.secrets['sources.postgres.credentials'],
+        table=jobs_table,
+        schema=DB_SCHEMA,
+        included_columns=['name'],
+        backend='sqlalchemy',
+    )
+
+    pipeline.run(
+        active_jobs | refresh_batch_jobs(gemini),
+        table_name=jobs_table,
+        write_disposition='replace',
+        primary_key='name',
+        loader_file_format='parquet',
+    )
+
+    row_counts = get_normalize_row_counts(pipeline)
+    log.info(f'row counts: {row_counts}')
+    return row_counts
+
+
+@task
+def embed_lyrics_extract_task(
+    embed_task: EmbeddingTask, delete_finished=True
+) -> dict[str, int]:
     """
     Extract embeddings from completed batch jobs.
 
@@ -576,35 +614,51 @@ def embed_lyrics_extract_jobs() -> dict[str, int]:
     """
     log = logging.getLogger('airflow.task')
     gemini = _make_client()
-    n_active_jobs = len(gemini.batches.list()) > 0
 
+    try:
+        jobs_table = EMBEDDING_JOB_TABLES[embed_task]
+        embeddings_table = EMBEDDING_TABLES[embed_task]
+    except KeyError as e:
+        raise NotImplementedError(
+            f'No batch embedding tables configured for task {embed_task}. '
+        ) from e
+
+    pipeline_name = 'embed_lyrics'
+    if embed_task:
+        pipeline_name += '-' + embed_task.replace(' ', '_')
     pipeline = dlt.pipeline(
-        'embed_lyrics',
+        pipeline_name,
+        dataset_name=DB_SCHEMA,
         destination=dlt.destinations.postgres(),
-        dataset_name='genius',
+        # destination=dlt.destinations.duckdb(),
+        # dev_mode=True,
     )
 
-    if not n_active_jobs:
-        log.debug('No active running jobs')
-        return {}
+    active_jobs = sql_table(
+        dlt.secrets['sources.postgres.credentials'],
+        table=jobs_table,
+        schema=DB_SCHEMA,
+        included_columns=['name', 'state'],
+        backend='sqlalchemy',
+    )
 
-    log.info(f'Checking {n_active_jobs} jobs currently in the queue')
     pipeline.extract(
-        retrieve_all_batch_file_jobs(gemini, delete_finished=True),
-        table_name='lyrics_embed',
-        write_disposition='merge',
-        primary_key='id',
+        active_jobs.add_filter(lambda job: job['state'] == 'JOB_STATE_SUCCEEDED')
+        | retrieve_batch_file_job(gemini, delete_finished),
+        table_name=embeddings_table,
         loader_file_format='parquet',
     )
     pipeline.normalize()
-    _load_all_normalized(pipeline, 'lyrics_embed')
+    _load_all_normalized(pipeline, embeddings_table)
     row_counts = get_normalize_row_counts(pipeline)
     log.info(f'row counts: {row_counts}')
     return row_counts
 
 
 @task
-def embed_lyrics_submit_jobs(n_job_slots=MAX_EMBED_LYRICS_JOBS) -> dict[str, int]:
+def embed_lyrics_submit_task(
+    embed_task: EmbeddingTask, n_job_slots=MAX_EMBED_LYRICS_JOBS
+) -> dict[str, int]:
     """
     Submit new lyrics embedding batch jobs.
 
@@ -614,24 +668,30 @@ def embed_lyrics_submit_jobs(n_job_slots=MAX_EMBED_LYRICS_JOBS) -> dict[str, int
     log = logging.getLogger('airflow.task')
     assert n_job_slots <= MAX_CONCURRENT_JOBS
     gemini = _make_client()
-    n_active_jobs = len(gemini.batches.list()) > 0
 
+    try:
+        jobs_table = EMBEDDING_JOB_TABLES[embed_task]
+        lyrics_table = EMBEDDING_LYRICS_TABLES[embed_task]
+    except KeyError as e:
+        raise NotImplementedError(
+            f'No batch embedding tables configured for task {embed_task}. '
+        ) from e
+
+    pipeline_name = 'embed_lyrics'
+    if embed_task:
+        pipeline_name += '-' + embed_task.replace(' ', '_')
     pipeline = dlt.pipeline(
-        'embed_lyrics',
+        pipeline_name,
+        dataset_name=DB_SCHEMA,
         destination=dlt.destinations.postgres(),
-        dataset_name='genius',
+        # destination=dlt.destinations.duckdb(),
+        # dev_mode=True,
     )
-
-    n_active_jobs = len(gemini.batches.list())
-    n_new_jobs = n_job_slots - n_active_jobs
-    if n_new_jobs <= 0:
-        log.warning('Concurrent jobs limit reached, not submitting any new jobs')
-        return {}
 
     lyrics_to_embed = sql_table(
         dlt.secrets['sources.postgres.credentials'],
-        table='lyrics_no_embed',
-        schema='genius',
+        table=lyrics_table,
+        schema=DB_SCHEMA,
         included_columns=['id', 'lyrics'],
         backend='connectorx',
         chunk_size=MAX_JOB_SIZE,
@@ -640,18 +700,46 @@ def embed_lyrics_submit_jobs(n_job_slots=MAX_EMBED_LYRICS_JOBS) -> dict[str, int
             'return_type': 'arrow_stream',
         },
     )
+    log.info(f'Submitting (at most) {n_job_slots} new jobs')
     pipeline.run(
         (
-            lyrics_to_embed
-            .add_limit(n_new_jobs)
-            .add_map(lambda t: t.rename_columns(['id', 'content']))
-            | submit_batch_file_job(disp_name='lyrics-batch-embed-file')
+            lyrics_to_embed.add_limit(n_job_slots).add_map(
+                lambda t: t.rename_columns(['id', 'content'])
+            )
+            | submit_batch_file_job(
+                gemini,
+                task=embed_task,
+                disp_name=f'lyrics-batch-embed-file:{embed_task}',
+            )
         ),
-        table_name='lyrics_embed_jobs',
-        write_disposition='replace',
+        table_name=jobs_table,
+        write_disposition='append',
         primary_key='name',
         loader_file_format='parquet',
     )
     row_counts = get_normalize_row_counts(pipeline)
     log.info(f'row counts: {row_counts}')
     return row_counts
+
+
+def make_embed_task_group(task: EmbeddingTask):
+    group_id = 'embed_lyrics'
+    if task:
+        group_id += '-' + task.replace(' ', '_')
+
+    @task_group(group_id=group_id)
+    def embeddings(task: EmbeddingTask):
+        return (
+            embed_lyrics_refresh_task(task)
+            >> embed_lyrics_extract_task(task)
+            >> embed_lyrics_submit_task(task)
+        )
+
+    return embeddings(task)
+
+
+if __name__ == '__main__':
+    log = logging.getLogger(__name__)
+    embed_lyrics_refresh_task.function(embed_task='clustering')
+    embed_lyrics_extract_task.function(embed_task='clustering', delete_finished=True)
+    embed_lyrics_submit_task.function(embed_task='clustering', n_job_slots=2)

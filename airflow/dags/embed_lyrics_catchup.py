@@ -1,6 +1,10 @@
 from airflow.sdk import dag
 from airflow.sdk import CronDataIntervalTimetable
-from data_loader.embeddings import embed_lyrics_extract_jobs, embed_lyrics_submit_jobs
+
+from data_loader.embeddings import (
+    EmbeddingTask,
+    make_embed_task_group,
+)
 
 
 @dag(
@@ -9,10 +13,10 @@ from data_loader.embeddings import embed_lyrics_extract_jobs, embed_lyrics_submi
     schedule=CronDataIntervalTimetable('@hourly', timezone='UTC'),
     catchup=False,
     max_active_runs=1,
-    max_active_tasks=1,
 )
 def embed_lyrics_catchup():
-    embed_lyrics_extract_jobs() >> embed_lyrics_submit_jobs()
+    EMBEDDING_TYPES = (None, EmbeddingTask.CLUSTERING)
+    [make_embed_task_group(task) for task in EMBEDDING_TYPES]
 
 
 embed_lyrics_catchup()
