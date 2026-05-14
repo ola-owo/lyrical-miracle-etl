@@ -154,8 +154,10 @@ def _wait_for_job(job_name: str, client: Client, wait_time=60) -> BatchJob:
 
 
 def _job_to_dict(job: BatchJob) -> dict:
+    FIELDS_TO_RM = ['dest', 'completion_stats', 'error', 'output_info', 'src']
     job_dict = job.__dict__.copy()
-    job_dict.pop('dest', None)
+    for field in FIELDS_TO_RM:
+        job_dict.pop(field, None)
     return job_dict
 
 
@@ -579,18 +581,21 @@ def embed_lyrics_refresh_task(embed_task: EmbeddingTask) -> dict[str, int]:
         destination=dlt.destinations.postgres(),
         # destination=dlt.destinations.duckdb(),
         # dev_mode=True,
+        import_schema_path='schemas/import',
+        export_schema_path='schemas/export',
     )
 
     active_jobs = sql_table(
         dlt.secrets['sources.postgres.credentials'],
         table=jobs_table,
         schema=DB_SCHEMA,
-        included_columns=['name'],
+        included_columns=['name', 'state'],
         backend='sqlalchemy',
     )
 
     pipeline.run(
-        active_jobs | refresh_batch_jobs(gemini),
+        active_jobs.add_filter(lambda job: job['state'] != 'JOB_STATE_SUCCEEDED')
+        | refresh_batch_jobs(gemini),
         table_name=jobs_table,
         write_disposition='replace',
         primary_key='name',
