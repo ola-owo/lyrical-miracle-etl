@@ -132,22 +132,7 @@ tables:
         row_key: true
     write_disposition: replace
     resource: refresh_batch_jobs
-    file_format: parquet
-  lyrics_embed_clustering:
-    columns:
-      id:
-        nullable: true
-        data_type: bigint
-      embedding:
-        nullable: true
-        data_type: json
-      _dlt_load_id:
-        data_type: text
-        nullable: false
-        precision: 64
-    write_disposition: append
-    file_format: parquet
-    resource: retrieve_batch_file_job
+    file_format: preferred
 settings:
   detections:
   - iso_timestamp

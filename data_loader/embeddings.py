@@ -579,10 +579,8 @@ def embed_lyrics_refresh_task(embed_task: EmbeddingTask) -> dict[str, int]:
         pipeline_name,
         dataset_name=DB_SCHEMA,
         destination=dlt.destinations.postgres(),
-        # destination=dlt.destinations.duckdb(),
-        # dev_mode=True,
         import_schema_path='schemas/import',
-        export_schema_path='schemas/export',
+        # export_schema_path='schemas/export',
     )
 
     active_jobs = sql_table(
@@ -599,7 +597,6 @@ def embed_lyrics_refresh_task(embed_task: EmbeddingTask) -> dict[str, int]:
         table_name=jobs_table,
         write_disposition='replace',
         primary_key='name',
-        loader_file_format='parquet',
     )
 
     row_counts = get_normalize_row_counts(pipeline)

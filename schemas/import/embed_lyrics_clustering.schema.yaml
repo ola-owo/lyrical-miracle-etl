@@ -83,7 +83,7 @@ tables:
         unique: true
         row_key: true
     write_disposition: replace
-    file_format: parquet
+    file_format: preferred
     resource: refresh_batch_jobs
   _dlt_pipeline_state:
     columns:
