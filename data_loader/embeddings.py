@@ -717,7 +717,6 @@ def embed_lyrics_submit_task(
         table_name=jobs_table,
         write_disposition='append',
         primary_key='name',
-        loader_file_format='parquet',
     )
     row_counts = get_normalize_row_counts(pipeline)
     log.info(f'row counts: {row_counts}')
@@ -742,6 +741,6 @@ def make_embed_task_group(task: EmbeddingTask):
 
 if __name__ == '__main__':
     log = logging.getLogger(__name__)
-    embed_lyrics_refresh_task.function(embed_task='clustering')
-    embed_lyrics_extract_task.function(embed_task='clustering', delete_finished=True)
-    embed_lyrics_submit_task.function(embed_task='clustering', n_job_slots=2)
+    embed_lyrics_refresh_task.function(embed_task=None)
+    embed_lyrics_extract_task.function(embed_task=None, delete_finished=True)
+    embed_lyrics_submit_task.function(embed_task=None, n_job_slots=2)
