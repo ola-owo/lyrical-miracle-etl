@@ -1,5 +1,4 @@
 from airflow.sdk import dag
-from airflow.sdk import CronDataIntervalTimetable
 
 from data_loader.embeddings import (
     EmbeddingTask,
@@ -10,7 +9,6 @@ from data_loader.embeddings import (
 @dag(
     dag_id='refresh_embed_jobs',
     description='(TESTING) refresh embed-lyrics jobs table',
-    catchup=False,
     max_active_runs=1,
 )
 def refresh_embed_jobs():

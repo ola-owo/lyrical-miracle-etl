@@ -1,5 +1,4 @@
 from airflow.sdk import dag
-from airflow.sdk import CronDataIntervalTimetable
 
 from data_loader.embeddings import (
     EmbeddingTask,
@@ -10,8 +9,6 @@ from data_loader.embeddings import (
 @dag(
     dag_id='embed_lyrics_catchup',
     description='Catch up on lyrics embedding',
-    schedule=CronDataIntervalTimetable('@hourly', timezone='UTC'),
-    catchup=False,
     max_active_runs=1,
 )
 def embed_lyrics_catchup():
