@@ -1,4 +1,4 @@
-FROM apache/airflow:3.2.1-python3.14
+FROM apache/airflow:slim-3.2.1-python3.14
 
 ARG DATA_DIR=/data
 ENV AIRFLOW_HOME=/opt/airflow \

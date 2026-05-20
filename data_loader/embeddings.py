@@ -35,7 +35,7 @@ MAX_CONCURRENT_JOBS = 100
 EMBEDDING_DIM = 768
 
 # Airflow task limits
-MAX_EMBED_LYRICS_JOBS = 5  # above 10 tends to cause 429s
+MAX_EMBED_LYRICS_JOBS = 8  # above 8-10 tends to cause 429s
 
 
 @deprecated('gemini-embedding-001 model is deprecated')
@@ -561,7 +561,16 @@ def _load_all_normalized(pipeline: dlt.Pipeline, tables, clear_after_load=True):
 
 
 @task
-def embed_lyrics_refresh_task(embed_task: EmbeddingTask) -> dict[str, int]:
+def embed_lyrics_refresh_task(
+    embed_task: EmbeddingTask, drop_completed: bool = True
+) -> dict[str, int]:
+    """
+    Refresh all jobs in the Active Embedding Jobs table
+
+    Args:
+        embed_task: Embedding type
+        drop_completed: Drop jobs that were already complete before refreshing
+    """
     log = logging.getLogger('airflow.task')
     gemini = _make_client()
 
@@ -590,10 +599,13 @@ def embed_lyrics_refresh_task(embed_task: EmbeddingTask) -> dict[str, int]:
         included_columns=['name', 'state'],
         backend='sqlalchemy',
     )
+    if drop_completed:
+        active_jobs = active_jobs.add_filter(
+            lambda job: job['state'] != 'JOB_STATE_SUCCEEDED'
+        )
 
     pipeline.run(
-        active_jobs.add_filter(lambda job: job['state'] != 'JOB_STATE_SUCCEEDED')
-        | refresh_batch_jobs(gemini),
+        active_jobs | refresh_batch_jobs(gemini),
         table_name=jobs_table,
         write_disposition='replace',
         primary_key='name',
@@ -610,6 +622,10 @@ def embed_lyrics_extract_task(
 ) -> dict[str, int]:
     """
     Extract embeddings from completed batch jobs.
+
+    Args:
+        embed_task: Embedding type
+        delete_finished: Delete completed jobs from the Gemini client's job queue
 
     Returns:
         row counts for all normalized tables.
@@ -659,16 +675,20 @@ def embed_lyrics_extract_task(
 
 @task
 def embed_lyrics_submit_task(
-    embed_task: EmbeddingTask, n_job_slots=MAX_EMBED_LYRICS_JOBS
+    embed_task: EmbeddingTask, n_new_jobs=MAX_EMBED_LYRICS_JOBS
 ) -> dict[str, int]:
     """
     Submit new lyrics embedding batch jobs.
+
+    Args:
+        embed_task: Embedding type
+        n_jobs_slots: Max number of jobs to submit
 
     Returns:
         row counts for all normalized tables.
     """
     log = logging.getLogger('airflow.task')
-    assert n_job_slots <= MAX_CONCURRENT_JOBS
+    assert n_new_jobs <= MAX_CONCURRENT_JOBS
     gemini = _make_client()
 
     try:
@@ -702,10 +722,10 @@ def embed_lyrics_submit_task(
             'return_type': 'arrow_stream',
         },
     )
-    log.info(f'Submitting (at most) {n_job_slots} new jobs')
+    log.info(f'Submitting (at most) {n_new_jobs} new jobs')
     pipeline.run(
         (
-            lyrics_to_embed.add_limit(n_job_slots).add_map(
+            lyrics_to_embed.add_limit(n_new_jobs).add_map(
                 lambda t: t.rename_columns(['id', 'content'])
             )
             | submit_batch_file_job(
@@ -723,7 +743,21 @@ def embed_lyrics_submit_task(
     return row_counts
 
 
-def make_embed_task_group(task: EmbeddingTask):
+def make_embed_task_group(
+    task: EmbeddingTask,
+    prune_job_tbl: bool = True,
+    prune_job_queue: bool = True,
+    n_new_jobs=MAX_EMBED_LYRICS_JOBS,
+):
+    """
+    Build a task group that refreshes, extracts, and submits embedding jobs
+
+    Args:
+        embed_task: Embedding type
+        prune_job_tbl: Drop jobs that were already complete before refreshing
+        prune_job_queue: Delete completed jobs from the Gemini client's job queue
+        n_new_jobs: Max number of jobs to submit
+    """
     group_id = 'embed_lyrics'
     if task:
         group_id += '-' + task.replace(' ', '_')
@@ -731,9 +765,9 @@ def make_embed_task_group(task: EmbeddingTask):
     @task_group(group_id=group_id)
     def embeddings(task: EmbeddingTask):
         return (
-            embed_lyrics_refresh_task(task)
-            >> embed_lyrics_extract_task(task)
-            >> embed_lyrics_submit_task(task)
+            embed_lyrics_refresh_task(task, prune_job_tbl)
+            >> embed_lyrics_extract_task(task, prune_job_queue)
+            >> embed_lyrics_submit_task(task, n_new_jobs)
         )
 
     return embeddings(task)
