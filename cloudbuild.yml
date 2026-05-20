@@ -1,0 +1,19 @@
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args: [
+      'build',
+      '-t',
+      '$_AR_HOSTNAME/$PROJECT_ID/$REPO_NAME/$_IMAGE_NAME:latest',
+      '.'
+    ]
+
+images:
+  - '$_AR_HOSTNAME/$PROJECT_ID/$REPO_NAME/$_IMAGE_NAME:latest'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+substitutions:
+  _LOCATION: us-central1
+  _AR_HOSTNAME: us-central1-docker.pkg.dev
+  _IMAGE_NAME: lyrical-miracle-etl
