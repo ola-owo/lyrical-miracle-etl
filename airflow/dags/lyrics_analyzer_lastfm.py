@@ -1,3 +1,5 @@
+from math import ceil
+
 from airflow.sdk import dag
 import pendulum as pnd
 from airflow.sdk import CronDataIntervalTimetable
@@ -11,6 +13,7 @@ from data_loader.genius import (
     get_lyrics_task,
 )
 from data_loader.embeddings import (
+    MAX_EMBED_LYRICS_JOBS,
     EmbeddingTask,
     make_embed_task_group,
 )
@@ -26,6 +29,7 @@ from data_loader.embeddings import (
 )
 def lyrics_analyzer_lastfm():
     EMBEDDING_TYPES = (None, EmbeddingTask.CLUSTERING)
+    n_jobs = ceil(MAX_EMBED_LYRICS_JOBS / len(EMBEDDING_TYPES))
     (
         get_scrobbles()
         >> match_to_dataset_task()
@@ -33,7 +37,7 @@ def lyrics_analyzer_lastfm():
         >> match_search_results_task()
         >> get_song_metadata_task()
         >> get_lyrics_task()
-        >> [make_embed_task_group(task) for task in EMBEDDING_TYPES]
+        >> [make_embed_task_group(task, n_new_jobs=n_jobs) for task in EMBEDDING_TYPES]
     )
 
 

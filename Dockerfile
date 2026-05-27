@@ -6,14 +6,17 @@ ENV AIRFLOW_HOME=/opt/airflow \
     AIRFLOW__CORE__LOAD_EXAMPLES=False \
     AIRFLOW__CORE__EXECUTOR=LocalExecutor \
     AIRFLOW__LOGGING__BASE_LOG_FOLDER=${AIRFLOW_HOME}/logs \
-    UV_LINK_MODE=copy
+    UV_LINK_MODE=copy \
+    UV_NO_CACHE=1 \
+    UV_LOCKED=1 \
+    UV_NO_DEV=1
 
 WORKDIR ${AIRFLOW_HOME}
 COPY pyproject.toml uv.lock ./
 RUN uv venv --system-site-packages && \
-    uv sync -n --active --locked --no-dev --no-install-project
+    uv sync --active --no-install-project
 COPY data_loader/ ./data_loader/
-RUN uv sync -n --active --locked --no-dev
+RUN uv sync --active
 
 ARG DAGS_FOLDER="airflow/dags"
 COPY ${DAGS_FOLDER} ./dags/
