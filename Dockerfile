@@ -1,4 +1,4 @@
-FROM apache/airflow:slim-3.2.1-python3.14
+FROM apache/airflow:slim-3.2.2-python3.14
 
 ARG DATA_DIR=/data \
     AIRFLOW_PORT=8080

@@ -625,7 +625,7 @@ wheels = [
 
 [[package]]
 name = "data-loader"
-version = "0.2.2"
+version = "0.2.3"
 source = { editable = "." }
 dependencies = [
     { name = "adbc-driver-postgresql" },
@@ -652,7 +652,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "adbc-driver-postgresql", specifier = ">=1.11.0" },
-    { name = "apache-airflow", extras = ["graphviz"], specifier = ">=3.2.1" },
+    { name = "apache-airflow", extras = ["graphviz"], specifier = ">=3.2.2" },
     { name = "asyncpg", specifier = ">=0.31.0" },
     { name = "connectorx", specifier = ">=0.4.5" },
     { name = "dlt", extras = ["duckdb", "postgres", "sql-database"], specifier = ">=1.27.0" },

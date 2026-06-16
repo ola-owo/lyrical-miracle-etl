@@ -1,10 +1,10 @@
 [project]
 name = "data-loader"
-version = "0.2.2"
+version = "0.2.3"
 requires-python = ">=3.14"
 dependencies = [
     "adbc-driver-postgresql>=1.11.0",
-    "apache-airflow[graphviz]>=3.2.1",
+    "apache-airflow[graphviz]>=3.2.2",
     "asyncpg>=0.31.0",
     "connectorx>=0.4.5",
     "dlt[duckdb,postgres,sql-database]>=1.27.0",
