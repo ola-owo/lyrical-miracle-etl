@@ -353,8 +353,8 @@ def genius_search(tracks: pa.Table):
         tracks.iter_rows(named=True),
         total=tracks.height,
         desc='searching for tracks',
-        leave=False,
         unit='req',
+        disable=None,
     ):
         no_result = {
             # blank record indicates no search results
@@ -434,7 +434,7 @@ def match_search_results(search_results: pa.Table):
     for search_results_this_song in tqdm(
         search_results.partition_by('searchtext'),
         desc='matching songs to search results',
-        leave=False,
+        disable=None,
     ):
         match_results = fuzzy_match(
             search_results_this_song['searchtext'].head(1),
@@ -541,8 +541,8 @@ def get_song_metadata(songs):
         df_genius_song_matches.iter_rows(named=True),
         total=n_search,
         desc='getting Genius song info',
-        leave=False,
         unit='req',
+        disable=None,
     ):
         song_id = song['g_id']
         song_title = song['g_title']
@@ -679,8 +679,8 @@ def get_lyrics(songs):
         songs.iter_rows(named=True),
         total=songs.height,
         desc='getting lyrics',
-        leave=False,
         unit='req',
+        disable=None,
     ):
         song_id = song['id']
         song_full_title = song['full_title']

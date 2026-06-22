@@ -131,7 +131,6 @@ def _wait_for_job(job_name: str, client: Client, wait_time=60) -> BatchJob:
     for job in tqdm(
         _poll_job_state(job_name, client),
         'waiting for batch job',
-        leave=True,
         unit=' polls',
     ):
         if job.state.name in ('JOB_STATE_PENDING', 'JOB_STATE_RUNNING'):
@@ -774,7 +773,6 @@ def make_embed_task_group(
 
 
 if __name__ == '__main__':
-    log = logging.getLogger(__name__)
     embed_lyrics_refresh_task.function(embed_task=None)
     embed_lyrics_extract_task.function(embed_task=None, delete_finished=True)
     embed_lyrics_submit_task.function(embed_task=None, n_job_slots=2)
