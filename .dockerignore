@@ -10,6 +10,7 @@ __pycache__/
 .dlt/secrets.toml
 **/*.env
 
+keys/
 data/
 logs/
 airflow.db

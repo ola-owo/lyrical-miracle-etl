@@ -1,6 +1,6 @@
 [project]
 name = "data-loader"
-version = "0.2.3"
+version = "0.3.0"
 requires-python = ">=3.14"
 dependencies = [
     "adbc-driver-postgresql>=1.11.0",
@@ -9,6 +9,7 @@ dependencies = [
     "connectorx>=0.4.5",
     "dlt[duckdb,postgres,sql-database]>=1.27.0",
     "fsspec>=2026.4.0",
+    "google-cloud-aiplatform>=1.157.0",
     "google-genai>=2.4.0",
     "lyricsgenius>=3.12.1",
     "numpy>=2.4.6",

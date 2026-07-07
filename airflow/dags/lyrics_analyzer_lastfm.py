@@ -17,6 +17,7 @@ from data_loader.embeddings import (
     EmbeddingTask,
     make_embed_task_group,
 )
+from data_loader.big5 import big5_predict_task
 
 
 @dag(
@@ -37,7 +38,10 @@ def lyrics_analyzer_lastfm():
         >> match_search_results_task()
         >> get_song_metadata_task()
         >> get_lyrics_task()
-        >> [make_embed_task_group(task, n_new_jobs=n_jobs) for task in EMBEDDING_TYPES]
+        >> (
+            [make_embed_task_group(task, n_new_jobs=n_jobs) for task in EMBEDDING_TYPES]
+            + [big5_predict_task()]
+        )
     )
 
 

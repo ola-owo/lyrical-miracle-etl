@@ -1,8 +1,14 @@
 # Data files
 *.pkl*
+*.db
 *.duckdb
 *.gz
 *.parquet
+data/
+
+# secrets
+keys/
+.env
 
 # Gitignore template below copied from:
 # https://github.com/github/gitignore/blob/main/Python.gitignore
