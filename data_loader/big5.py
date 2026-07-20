@@ -44,12 +44,19 @@ def big5_predict_online(texts: pl.DataFrame, endpoint: aiplatform.Endpoint = Non
 
     if not endpoint:
         log.debug('Initializing endpoint...')
-        aiplatform.init(project=dlt.secrets['gcloud.project_id'], location=dlt.secrets['gcloud.region'])
-        endpoint = aiplatform.Endpoint("projects/{}/locations/{}/endpoints/{}".format(
-            dlt.secrets['gcloud.project_id'], dlt.secrets['gcloud.region'], dlt.secrets['gcloud.big5_endpoint']
-        ))
+        aiplatform.init(
+            project=dlt.secrets['gcloud.project_id'],
+            location=dlt.secrets['gcloud.region'],
+        )
+        endpoint = aiplatform.Endpoint(
+            'projects/{}/locations/{}/endpoints/{}'.format(
+                dlt.secrets['gcloud.project_id'],
+                dlt.secrets['gcloud.region'],
+                dlt.secrets['gcloud.big5_endpoint'],
+            )
+        )
 
-    params = { "include_text": False, "include_traits": False }
+    params = {'include_text': False, 'include_traits': False}
     n_batches = ceil(texts.height / REQUEST_BATCH_SIZE)
     log.info(f'Splitting {texts.height} reqs into {n_batches} batches')
     for batch in tqdm(
@@ -64,10 +71,9 @@ def big5_predict_online(texts: pl.DataFrame, endpoint: aiplatform.Endpoint = Non
         # if this happens, sleep(?) and retry
         resp = endpoint.predict(instances=batch['content'].to_list(), parameters=params)
         log.debug('Got inference response.')
-        preds = (
-            pl.DataFrame(resp.predictions, schema=BIG5_TRAITS_SHORT, orient='row')
-            .select(batch['id'], pl.all())
-        )
+        preds = pl.DataFrame(
+            resp.predictions, schema=BIG5_TRAITS_SHORT, orient='row'
+        ).select(batch['id'], pl.all())
         yield preds.to_dicts()
 
 
@@ -96,7 +102,8 @@ def big5_predict_task() -> dict[str, int]:
         destination=dlt.destinations.postgres(),
     )
     pipeline.run(
-        lyrics_to_embed.add_map(lambda t: rename_columns(t, ['id', 'content'])) | big5_predict_online(),
+        lyrics_to_embed.add_map(lambda t: rename_columns(t, ['id', 'content']))
+        | big5_predict_online(),
         table_name='lyrics_big5',
         primary_key='id',
         write_disposition='merge',
