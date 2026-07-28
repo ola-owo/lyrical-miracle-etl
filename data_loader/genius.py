@@ -1,23 +1,22 @@
-from pathlib import Path
 import logging
-from time import sleep
+from pathlib import Path
 from random import random
+from time import sleep
 
+import dlt
+import numpy as np
 import polars as pl
 import polars.selectors as cs
 import pyarrow as pa
-from tqdm import tqdm
-import numpy as np
-from scipy import sparse
 import rapidfuzz as fuzz
-from lyricsgenius import Genius
-
 from airflow.sdk import task
-import dlt
 from dlt import transformer
-from dlt.sources.sql_database import sql_table
-from dlt.sources.helpers.requests.retry import Client
 from dlt.sources.helpers.requests import HTTPError
+from dlt.sources.helpers.requests.retry import Client
+from dlt.sources.sql_database import sql_table
+from lyricsgenius import Genius
+from scipy import sparse
+from tqdm import tqdm
 
 from data_loader.dlt_utils import get_normalize_row_counts
 
@@ -83,7 +82,7 @@ def make_genius_client(
     client._session = Client(
         request_timeout=10,
         respect_retry_after_header=True,
-        session_attrs=dict(headers=client._session.headers),
+        session_attrs={'headers': client._session.headers},
     )
     return client
 
@@ -566,7 +565,7 @@ def get_song_metadata(songs):
                     )
                     continue
             else:
-                raise e
+                raise
 
         if not res:
             log.error(
@@ -703,7 +702,7 @@ def get_lyrics(songs):
                         str(e),
                     )
                     continue
-            raise e
+            raise
 
         if not lyrics:
             log.warning(

@@ -1,15 +1,14 @@
 import logging
 from base64 import b64encode
 
+import dlt
 import pendulum as pn
 from airflow.sdk import task
-
-import dlt
-from dlt import source, resource, transformer
+from dlt import resource, source, transformer
 from dlt.common.configuration import configspec
 from dlt.sources.helpers.rest_client import RESTClient
-from dlt.sources.helpers.rest_client.paginators import JSONResponseCursorPaginator
 from dlt.sources.helpers.rest_client.auth import OAuth2ClientCredentials
+from dlt.sources.helpers.rest_client.paginators import JSONResponseCursorPaginator
 
 log = logging.getLogger('dlt')
 
