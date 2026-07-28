@@ -1,13 +1,11 @@
 import logging
 
-import pendulum as pn
-from airflow.sdk import task
-from airflow.sdk import get_current_context
-
 import dlt
+import pendulum as pn
+from airflow.sdk import get_current_context, task
 from dlt.sources.helpers.rest_client import RESTClient
-from dlt.sources.helpers.rest_client.paginators import PageNumberPaginator
 from dlt.sources.helpers.rest_client.auth import APIKeyAuth
+from dlt.sources.helpers.rest_client.paginators import PageNumberPaginator
 
 from data_loader.dlt_utils import get_normalize_row_counts
 
@@ -53,8 +51,7 @@ def scrobbles(
 
     res = lastfm_client.get('/', params)
     res.raise_for_status()
-    for track in res.json()['recenttracks']['track']:
-        yield track
+    yield from res.json()['recenttracks']['track']
 
 
 def convert_uts(track):

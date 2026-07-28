@@ -1,19 +1,16 @@
 import logging
 from math import ceil
 
+import dlt
 import polars as pl
+from airflow.sdk import task
+from dlt import transformer
+from dlt.common.libs.pyarrow import rename_columns
+from dlt.sources.sql_database import sql_table
+from google.cloud import aiplatform
 from tqdm import tqdm
 
-from google.cloud import aiplatform
-
-from airflow.sdk import task
-import dlt
-from dlt import transformer
-from dlt.sources.sql_database import sql_table
-from dlt.common.libs.pyarrow import rename_columns
-
 from data_loader.dlt_utils import get_normalize_row_counts
-
 
 # global vars
 REQUEST_BATCH_SIZE = 8

@@ -1,23 +1,22 @@
 from math import ceil
 
-from airflow.sdk import dag
 import pendulum as pnd
-from airflow.sdk import CronDataIntervalTimetable
+from airflow.sdk import CronDataIntervalTimetable, dag
 
-from data_loader.lastfm import get_scrobbles
-from data_loader.genius import (
-    match_to_dataset_task,
-    genius_search_task,
-    match_search_results_task,
-    get_song_metadata_task,
-    get_lyrics_task,
-)
+from data_loader.big5 import big5_predict_task
 from data_loader.embeddings import (
     MAX_EMBED_LYRICS_JOBS,
     EmbeddingTask,
     make_embed_task_group,
 )
-from data_loader.big5 import big5_predict_task
+from data_loader.genius import (
+    genius_search_task,
+    get_lyrics_task,
+    get_song_metadata_task,
+    match_search_results_task,
+    match_to_dataset_task,
+)
+from data_loader.lastfm import get_scrobbles
 
 
 @dag(

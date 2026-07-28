@@ -1,31 +1,28 @@
-import logging
-from time import sleep
 import json
+import logging
+from collections.abc import Iterable
 from enum import StrEnum
 from io import StringIO
-from typing import Iterable
 from pathlib import Path
+from time import sleep
 from warnings import deprecated
 
-import pyarrow as pa
-import polars as pl
-from tqdm import tqdm
-import fsspec
-import duckdb
-from adbc_driver_postgresql import dbapi
-
-from google import genai
-from google.genai import Client
-from google.genai.types import BatchJob, JobState
-from google.genai.errors import ClientError
-
-from airflow.sdk import task, task_group
 import dlt
+import duckdb
+import fsspec
+import polars as pl
+import pyarrow as pa
+from adbc_driver_postgresql import dbapi
+from airflow.sdk import task, task_group
 from dlt import transformer
 from dlt.sources.sql_database import sql_table
+from google import genai
+from google.genai import Client
+from google.genai.errors import ClientError
+from google.genai.types import BatchJob, JobState
+from tqdm import tqdm
 
 from data_loader.dlt_utils import get_normalize_row_counts
-
 
 # gemini api batch limits
 MAX_JOB_SIZE = 100
@@ -99,7 +96,7 @@ def _check_batch_inputs(texts: pl.DataFrame):
 
 
 def _build_prompt(
-    content: pl.Expr, title: pl.Expr = pl.lit('none'), task: EmbeddingTask = None
+    content: pl.Expr, title: pl.Expr = None, task: EmbeddingTask = None
 ):
     """
     Build an embedding prompt to be passed to `gemini-embedding-2`
@@ -112,6 +109,8 @@ def _build_prompt(
         task: task type
     """
     content = content.str.replace_all('|', '', literal=True)
+    if title is None:
+        title = pl.lit('none')
     title = title.str.replace_all('|', '', literal=True)
     if task:
         task = EmbeddingTask(task)  # will ValueError if task is invalid
