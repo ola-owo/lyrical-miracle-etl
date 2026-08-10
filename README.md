@@ -2,15 +2,16 @@
 
 ## Summary
 
-This is an ETL pipeline that pulls recent LastFM listening history and processes it
-for downstream analyses.
+This is an ETL pipeline that pulls my recent music listening history
+and processes it for downstream analyses.
 
 ## Pipeline breakdown
 
 1. `get_scrobbles`: Get the past week's scrobbles from LastFM
 1. `match_to_dataset`: Match scrobbles to the cached Genius song dataset
 1. `genius_search`: Search Genius for the remaining unmatched scrobbles
-1. `match_search_results`: Fuzzy-match search queries and results from the previous step
+1. `match_search_results`:
+   Fuzzy-match search queries and results from the previous step
 1. `get_lyrics`: Retrieve song lyrics from Genius
 1. `embed_lyrics`: Convert lyrics to embeddings using Gemini
 
@@ -18,8 +19,9 @@ Results of each task in are saved to a postgresql database.
 
 ## How to run
 
-The entire pipeline can be run in a single Docker container
-based on the official [Airflow community image](https://airflow.apache.org/docs/docker-stack/index.html).
+The entire pipeline can be run in a single Docker container based on the
+official
+[Airflow community image](https://airflow.apache.org/docs/docker-stack/index.html).
 
 Build the image:
 
@@ -38,7 +40,8 @@ docker run --rm -it -p 8080:8080 \
   lyrical-miracle-etl standalone
 ```
 
-The `.env` file should contain your Airflow config variables, dlt configs, and dlt secrets.
+The `.env` file should contain your Airflow config variables, dlt configs,
+and dlt secrets.
 For example:
 
 ```sh
