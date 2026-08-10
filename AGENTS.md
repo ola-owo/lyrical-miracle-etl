@@ -40,7 +40,9 @@ or files outside the sandbox.
 Some tips to mitigate this are:
 
 - use normal sandboxed commands for local file work
-- set `UV_CACHE_DIR=/tmp/uv-cache` when running any `uv` commands inside this sandbox
-- request approval before running commands that access information outside the sandbox
+- set `UV_CACHE_DIR=/tmp/uv-cache`
+  when running any `uv` commands inside this sandbox
+- request approval before running commands
+  that access information outside the sandbox
 - if a command fails due to sandbox restrictions,
   request approval from the user to run it again with escalated privileges.

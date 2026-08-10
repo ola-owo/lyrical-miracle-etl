@@ -8,7 +8,8 @@ for downstream analyses.
 1. `get_scrobbles`: Get the past week's scrobbles from LastFM
 1. `match_to_dataset`: Match scrobbles to the cached Genius song dataset
 1. `genius_search`: Search Genius for the remaining unmatched scrobbles
-1. `match_search_results`: Fuzzy-match search queries and results from the previous step
+1. `match_search_results`:
+   Fuzzy-match search queries and results from the previous step
 1. `get_lyrics`: Retrieve song lyrics from Genius
 1. `embed_lyrics`: Convert lyrics to embeddings using Gemini
 1. `big5`: Get Big-5 scores of song lyrics using a custom model hosted on Agent Platform
