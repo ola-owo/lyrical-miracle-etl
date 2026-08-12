@@ -1,12 +1,25 @@
-// Keep permissive defaults but deny dlt secrets.toml
 {
-   "permission": {
-   "read": {
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    // Keep permissive defaults but deny dlt secrets.toml
+    "read": {
       "*": "allow",
       "*.env": "deny",
       "*.env.*": "deny",
-      "*.env.example": "allow"
-      "secrets.toml": "deny"
-    }
-  }
+      "*.env.example": "allow",
+      "secrets.toml": "deny",
+    },
+  },
+  "mcp": {
+    "neon": {
+      "type": "remote",
+      "url": "https://mcp.neon.tech/mcp?projectId=noisy-art-63149189&readonly=true&category=querying&category=schema&category=docs",
+      "enabled": false,
+    },
+    "dlt": {
+      "type": "local",
+      "command": ["uv", "run", "--with", "dlt-mcp[duckdb]", "dlt-mcp"],
+      "enabled": false,
+    },
+  },
 }
