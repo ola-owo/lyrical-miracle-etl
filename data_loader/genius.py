@@ -59,7 +59,7 @@ def make_genius_client(
     remove_section_headers=True,
     skip_non_songs=False,
     excluded_terms=_genius_client_excluded_terms,
-    sleep_time=1,
+    sleep_time=1.0,
     timeout=15,
     retries=1,
     **kwargs,
@@ -79,7 +79,7 @@ def make_genius_client(
     )
     # EXPERIMENTAL: replace lyricsgenius requests session with dlt's session
     # https://dlthub.com/docs/api_reference/dlt/sources/helpers/requests/session
-    client._session = Client(
+    client._session = Client(  # pyright: ignore[reportAttributeAccessIssue]
         request_timeout=10,
         respect_retry_after_header=True,
         session_attrs={'headers': client._session.headers},
@@ -343,14 +343,14 @@ def genius_search(tracks: pa.Table):
         log.info('no search queries given, exiting.')
         return
 
-    tracks: pl.DataFrame = pl.from_arrow(tracks).with_columns(
+    tracks_df = pl.DataFrame(tracks).with_columns(
         searchtext=normalize_titles(pl.col('song')) + ' ' + pl.col('artist')
     )
 
     genius = make_genius_client()
     for track in tqdm(
-        tracks.iter_rows(named=True),
-        total=tracks.height,
+        tracks_df.iter_rows(named=True),
+        total=tracks_df.height,
         desc='searching for tracks',
         unit='req',
         disable=None,
@@ -422,8 +422,8 @@ def match_search_results(search_results: pa.Table):
 
     # not normalizing Genius titles bc they're usually already clean,
     # and so we can tell instrumentals apart from real songs
-    search_results: pl.DataFrame = (
-        pl.from_arrow(search_results)
+    search_results_df = (
+        pl.DataFrame(search_results)
         .drop_nulls(['g_id', 'searchtext'])
         .with_columns(
             g_searchtext=pl.col('g_title') + ' ' + pl.col('g_primary_artist_names')
@@ -431,7 +431,7 @@ def match_search_results(search_results: pa.Table):
     )
 
     for search_results_this_song in tqdm(
-        search_results.partition_by('searchtext'),
+        search_results_df.partition_by('searchtext'),
         desc='matching songs to search results',
         disable=None,
     ):
@@ -531,7 +531,7 @@ def get_song_metadata(songs):
         log.info('No songs to lookup, exiting.')
         return
 
-    df_genius_song_matches = pl.from_arrow(songs)
+    df_genius_song_matches = pl.DataFrame(songs)
     n_search = df_genius_song_matches.height
     log.info(f'Looking up {n_search} songs')
 
@@ -553,7 +553,7 @@ def get_song_metadata(songs):
         except AssertionError as e:
             if isinstance(e.__context__, HTTPError):
                 e = e.__context__
-                if e.response.status_code == 429:
+                if (resp := e.response) and (resp.status_code == 429):
                     log.error('Got 429 (too many requests), stopping early')
                     return
                 else:  # usually 404
@@ -666,7 +666,7 @@ def get_lyrics(songs):
     if songs.num_rows == 0:
         log.info('no songs to lookup, exiting.')
         return
-    songs = pl.from_arrow(songs)
+    songs = pl.DataFrame(songs)
 
     # TODO (maybe): filter out old songs
     # release_date_cutoff = pn.Date.today().subtract(days=180)
@@ -691,7 +691,7 @@ def get_lyrics(songs):
         except AssertionError as e:
             if isinstance(e.__context__, HTTPError):
                 e = e.__context__
-                if e.response.status_code == 429:
+                if (resp := e.response) and (resp.status_code == 429):
                     log.error('Got 429 (Too many reqs), stopping early.')
                     return
                 else:
