@@ -41,7 +41,7 @@ def lyrics_analyzer_lastfm():
             [make_embed_task_group(task, n_new_jobs=n_jobs) for task in EMBEDDING_TYPES]
             + [big5_predict_task()]
         )
-    )
+    )  # pyright: ignore[reportUnusedExpression, reportOperatorIssue]
 
 
 lyrics_analyzer_lastfm()

@@ -1,13 +1,14 @@
 import logging
 from base64 import b64encode
+from typing import Any
 
 import dlt
 import pendulum as pn
 from airflow.sdk import task
 from dlt import resource, source, transformer
 from dlt.common.configuration import configspec
-from dlt.sources.helpers.rest_client import RESTClient
 from dlt.sources.helpers.rest_client.auth import OAuth2ClientCredentials
+from dlt.sources.helpers.rest_client.client import RESTClient
 from dlt.sources.helpers.rest_client.paginators import JSONResponseCursorPaginator
 
 log = logging.getLogger('dlt')
@@ -19,7 +20,7 @@ MAX_TRACKS_PER_REQUEST = 50
 class OAuth2ClientCredentialsHTTPBasic(OAuth2ClientCredentials):
     """Spotify's Oauth2 protocol for access token requests"""
 
-    def build_access_token_request(self) -> dict[str,]:
+    def build_access_token_request(self) -> dict[str, Any]:
         authentication = b64encode(
             f'{self.client_id}:{self.client_secret}'.encode()
         ).decode()
@@ -44,7 +45,9 @@ class OAuth2ClientCredentialsHTTPBasic(OAuth2ClientCredentials):
 
 
 @source
-def spotify_recents(start_time: pn.DateTime = None, end_time: pn.DateTime = None):
+def spotify_recents(
+    start_time: pn.DateTime | None = None, end_time: pn.DateTime | None = None
+):
     """
     Get spotify song, artist, and album information
     """
@@ -79,7 +82,9 @@ def spotify_recents(start_time: pn.DateTime = None, end_time: pn.DateTime = None
 
     @resource(write_disposition='append')
     def recently_played(
-        before: int = None, after: int = None, limit: int = MAX_TRACKS_PER_REQUEST
+        before: int | None = None,
+        after: int | None = None,
+        limit: int = MAX_TRACKS_PER_REQUEST,
     ):
         assert (before is None) ^ (after is None), (
             'Specify before or after but not both'
@@ -103,7 +108,7 @@ def spotify_recents(start_time: pn.DateTime = None, end_time: pn.DateTime = None
             '/me/player/recently-played',
             params=params,
         ):
-            yield page['items']
+            yield from page
 
     @transformer(data_from=recently_played, write_disposition='merge', primary_key='id')
     def tracks(track: dict):
@@ -153,9 +158,9 @@ def spotify_recents(start_time: pn.DateTime = None, end_time: pn.DateTime = None
 
 @task
 def recent_spotify_tracks(
-    start_time: pn.DateTime = None, end_time: pn.DateTime = None
+    start_time: pn.DateTime | None = None, end_time: pn.DateTime | None = None
 ) -> bool:
-    pass
+    raise NotImplementedError
 
 
 if __name__ == '__main__':

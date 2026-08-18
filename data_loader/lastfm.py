@@ -3,8 +3,8 @@ import logging
 import dlt
 import pendulum as pn
 from airflow.sdk import get_current_context, task
-from dlt.sources.helpers.rest_client import RESTClient
 from dlt.sources.helpers.rest_client.auth import APIKeyAuth
+from dlt.sources.helpers.rest_client.client import RESTClient
 from dlt.sources.helpers.rest_client.paginators import PageNumberPaginator
 
 from data_loader.dlt_utils import get_normalize_row_counts
@@ -14,8 +14,8 @@ MAX_TRACKS_PER_REQUEST = 1000
 
 @dlt.resource
 def scrobbles(
-    start: pn.DateTime = None,
-    end: pn.DateTime = None,
+    start: pn.DateTime | None = None,
+    end: pn.DateTime | None = None,
     limit: int = MAX_TRACKS_PER_REQUEST,
 ):
     """Get recent scrobbles from the current user"""
@@ -94,9 +94,14 @@ def test_pipeline():
 def get_scrobbles() -> dict[str, int]:
     log = logging.getLogger('airflow.task')
     context = get_current_context()
+    assert 'data_interval_start' in context
     start_time = context['data_interval_start']
+    assert 'data_interval_end' in context
     end_time = context['data_interval_end']
-    log.debug(f'Running task {context["ti"].run_id}')
+    assert 'ti' in context
+    ti = context['ti']
+    assert start_time and end_time and ti
+    log.debug(f'Running task {ti.run_id}')
     log.info(f'Getting scrobbles from {start_time.date()} to {end_time.date()}')
 
     pipeline = dlt.pipeline(

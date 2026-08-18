@@ -27,17 +27,19 @@ def _check_predict_inputs(texts: pl.DataFrame):
 
 
 @transformer
-def big5_predict_online(texts: pl.DataFrame, endpoint: aiplatform.Endpoint = None):
+def big5_predict_online(
+    texts: pl.DataFrame, endpoint: aiplatform.Endpoint | None = None
+):
     """
     :param texts: input table with columns `id` and `content`
     :param dim: embedding size
     """
     log = logging.getLogger('dlt')
-    texts: pl.DataFrame = pl.from_arrow(texts)
-    if texts.height == 0:
+    texts_df = pl.DataFrame(texts)
+    if texts_df.height == 0:
         log.info('Nothing to embed, exiting.')
         return
-    _check_predict_inputs(texts)
+    _check_predict_inputs(texts_df)
 
     if not endpoint:
         log.debug('Initializing endpoint...')
@@ -54,10 +56,10 @@ def big5_predict_online(texts: pl.DataFrame, endpoint: aiplatform.Endpoint = Non
         )
 
     params = {'include_text': False, 'include_traits': False}
-    n_batches = ceil(texts.height / REQUEST_BATCH_SIZE)
-    log.info(f'Splitting {texts.height} reqs into {n_batches} batches')
+    n_batches = ceil(texts_df.height / REQUEST_BATCH_SIZE)
+    log.info(f'Splitting {texts_df.height} reqs into {n_batches} batches')
     for batch in tqdm(
-        texts.iter_slices(REQUEST_BATCH_SIZE),
+        texts_df.iter_slices(REQUEST_BATCH_SIZE),
         total=n_batches,
         desc='Sending BIG5 inference requests',
         unit='req',
