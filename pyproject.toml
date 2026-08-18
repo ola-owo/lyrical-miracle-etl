@@ -33,7 +33,3 @@ module-root = ""
 
 [tool.ruff.format]
 quote-style = "single"
-
-[tool.pyright]
-include = ["data_loader", "airflow/dags", "notebooks"]
-exclude = ["**/__pycache__"]
