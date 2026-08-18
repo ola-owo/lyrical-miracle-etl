@@ -1,9 +1,11 @@
-# Summary
+# Lyrical Miracle ETL Pipeline
 
-This is an ETL pipeline that pulls my recent LastFM listening history and processes it
+## Summary
+
+This is an ETL pipeline that pulls recent LastFM listening history and processes it
 for downstream analyses.
 
-# Pipeline breakdown
+## Pipeline breakdown
 
 1. `get_scrobbles`: Get the past week's scrobbles from LastFM
 1. `match_to_dataset`: Match scrobbles to the cached Genius song dataset
@@ -14,7 +16,7 @@ for downstream analyses.
 
 Results of each task in are saved to a postgresql database.
 
-# How to run
+## How to run
 
 The entire pipeline can be run in a single Docker container
 based on the official [Airflow community image](https://airflow.apache.org/docs/docker-stack/index.html).

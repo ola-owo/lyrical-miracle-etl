@@ -21,9 +21,7 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = [
-    "marimo>=0.23.9",
-]
+dev = ["marimo>=0.23.9"]
 
 [build-system]
 requires = ["uv_build>=0.11,<0.12"]
@@ -35,3 +33,7 @@ module-root = ""
 
 [tool.ruff.format]
 quote-style = "single"
+
+[tool.pyright]
+include = ["data_loader", "airflow/dags", "notebooks"]
+exclude = ["**/__pycache__"]
