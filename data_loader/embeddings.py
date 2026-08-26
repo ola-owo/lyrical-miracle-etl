@@ -536,6 +536,50 @@ def _load_embeddings_to_pg(job_files: list[Path], table, schema, staging_schema=
         cxn.commit()
 
 
+def _load_embeddings_to_bq(job_files: list[Path], table, dset, staging_table=None):
+    """
+    Load normalized embeddings into bigquery
+    Load to a staging table, then upsert into main table
+
+    Args:
+        job_files: parquet file(s) to load
+        table: name of table to load into
+        schema: schema to load into
+        staging_schema: schema to use for staging table
+    """
+    log = logging.getLogger(__name__)
+    staging_table = staging_table or '_staging_' + table
+    dest_table_full = f'`{dset}.{table}`'
+    staging_table_full = f'`{dset}.{staging_table}`'
+
+    with dbapi.connect(
+        dlt.secrets['destination.bigquery.credentials'], autocommit=False
+    ) as cxn:
+        with cxn.cursor() as cur:
+            n_ingest = cur.adbc_ingest(
+                table,
+                pl.scan_parquet(job_files).unique('id').collect().to_arrow(),
+                mode='replace',
+                db_schema_name=dset,
+            )
+        cxn.commit()
+        log.info(f'Wrote {n_ingest} records to {staging_table_full}')
+        with cxn.cursor() as cur:
+            cur.execute(
+                f'CREATE TABLE IF NOT EXISTS {dest_table_full} (id bigint primary key, embedding float[])'
+            )
+            merge_res = cur.execute(f"""MERGE {dest_table_full} t
+                        USING {staging_table_full} stg ON t.id = stg.id
+                        WHEN NOT MATCHED THEN
+                        INSERT (id, embedding) VALUES(stg.id, stg.embedding)
+                        WHEN MATCHED AND t.embedding != stg.embedding THEN
+                        UPDATE SET embedding = stg.embedding;
+                        SELECT @@row_count AS affected_rows;""").fetch_polars()
+        merge_res = merge_res.select('affected_rows').item()
+        log.info(f'{table} staging -> main merge: {merge_res}')
+        cxn.commit()
+
+
 def _load_all_normalized(pipeline: dlt.Pipeline, tables, clear_after_load=True):
     """
     Load all normalized data into the pipeline's destination
@@ -552,6 +596,8 @@ def _load_all_normalized(pipeline: dlt.Pipeline, tables, clear_after_load=True):
         load_fn = _load_embeddings_to_duckdb
     elif pipeline.destination.destination_type == 'dlt.destinations.postgres':
         load_fn = _load_embeddings_to_pg
+    elif pipeline.destination.destination_type == 'dlt.destinations.bigquery':
+        load_fn = _load_embeddings_to_bq
     else:
         raise NotImplementedError(
             'Unsupported destination type:', pipeline.destination.destination_type
