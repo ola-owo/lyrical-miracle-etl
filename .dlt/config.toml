@@ -15,3 +15,6 @@ callback_port = 3000
 
 [sources.lastfm]
 api_base = "https://ws.audioscrobbler.com/2.0"
+
+[destination.bigquery]
+location = "US"

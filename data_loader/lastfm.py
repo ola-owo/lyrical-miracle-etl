@@ -105,7 +105,7 @@ def get_scrobbles() -> dict[str, int]:
     log.info(f'Getting scrobbles from {start_time.date()} to {end_time.date()}')
 
     pipeline = dlt.pipeline(
-        'scrobbles', destination=dlt.destinations.postgres(), dataset_name='lastfm'
+        'scrobbles', destination=dlt.destinations.bigquery(), dataset_name='lastfm'
     )
     pipeline.run(
         (

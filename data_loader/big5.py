@@ -85,20 +85,16 @@ def big5_predict_task() -> dict[str, int]:
     LYRICS_TABLE = 'lyrics_no_big5'
 
     lyrics_to_embed = sql_table(
-        dlt.secrets['sources.postgres.credentials'],
+        dlt.secrets['sources.bigquery.credentials'],
         table=LYRICS_TABLE,
         schema=DB_SCHEMA,
         included_columns=['id', 'lyrics'],
-        backend='connectorx',
-        backend_kwargs={
-            'conn': dlt.secrets['sources.postgres.credentials'],
-            'return_type': 'arrow_stream',
-        },
+        backend='pyarrow',
     )
     pipeline = dlt.pipeline(
         'big5',
         dataset_name=DB_SCHEMA,
-        destination=dlt.destinations.postgres(),
+        destination=dlt.destinations.bigquery(),
     )
     pipeline.run(
         lyrics_to_embed.add_map(lambda t: rename_columns(t, ['id', 'content']))

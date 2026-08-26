@@ -270,14 +270,13 @@ def match_to_dataset_task() -> dict[str, int]:
     """
     log = logging.getLogger('airflow.task')
     unsearched_songs = sql_table(
-        dlt.secrets['sources.postgres.credentials'],
+        dlt.secrets['sources.bigquery.credentials'],
         table='songs_not_searched',
         schema='lastfm',
-        backend='connectorx',
-        backend_kwargs={'conn': dlt.secrets['sources.postgres.credentials']},
+        backend='pyarrow',
     )
 
-    pipeline = dlt.pipeline('genius_search', destination=dlt.destinations.postgres())
+    pipeline = dlt.pipeline('genius_search', destination=dlt.destinations.bigquery())
     pipeline.run(
         unsearched_songs | match_to_dataset,
         dataset_name='lastfm',
@@ -384,13 +383,12 @@ def genius_search_task() -> dict[str, int]:
     Returns: row counts for all normalized tables.
     """
     log = logging.getLogger('airflow.task')
-    pipeline = dlt.pipeline('genius_search', destination=dlt.destinations.postgres())
+    pipeline = dlt.pipeline('genius_search', destination=dlt.destinations.bigquery())
     unsearched_songs = sql_table(
-        dlt.secrets['sources.postgres.credentials'],
+        dlt.secrets['sources.bigquery.credentials'],
         table='songs_not_searched',
         schema='lastfm',
-        backend='connectorx',
-        backend_kwargs={'conn': dlt.secrets['sources.postgres.credentials']},
+        backend='pyarrow',
     )
     pipeline.run(
         unsearched_songs | genius_search,
@@ -472,14 +470,13 @@ def match_search_results_task() -> dict[str, int]:
     """
     log = logging.getLogger('airflow.task')
     pipeline = dlt.pipeline(
-        'genius_search', destination=dlt.destinations.postgres(), dataset_name='lastfm'
+        'genius_search', destination=dlt.destinations.bigquery(), dataset_name='lastfm'
     )
     unmatched_searches = sql_table(
-        dlt.secrets['sources.postgres.credentials'],
+        dlt.secrets['sources.bigquery.credentials'],
         table='searches_not_matched',
         schema='lastfm',
-        backend='connectorx',
-        backend_kwargs={'conn': dlt.secrets['sources.postgres.credentials']},
+        backend='pyarrow',
     )
     pipeline.run(
         unmatched_searches | match_search_results,
@@ -592,17 +589,16 @@ def get_song_metadata_task() -> dict[str, int]:
     log = logging.getLogger('airflow.task')
     pipeline = dlt.pipeline(
         'genius_song_meta',
-        destination=dlt.destinations.postgres(),
+        destination=dlt.destinations.bigquery(),
         dataset_name='genius',
         import_schema_path='schemas/import',
         export_schema_path='schemas/export',
     )
     songs_to_search = sql_table(
-        dlt.secrets['sources.postgres.credentials'],
+        dlt.secrets['sources.bigquery.credentials'],
         table='genius_matches_without_metadata',
         schema='lastfm',
-        backend='connectorx',
-        backend_kwargs={'conn': dlt.secrets['sources.postgres.credentials']},
+        backend='pyarrow',
     )
     pipeline.run(
         songs_to_search | get_song_metadata,
@@ -627,16 +623,15 @@ def recheck_incomplete_songs_task() -> dict[str, int]:
     log = logging.getLogger('airflow.task')
     pipeline = dlt.pipeline(
         'genius_incomplete_song_meta',
-        destination=dlt.destinations.postgres(),
+        destination=dlt.destinations.bigquery(),
         dataset_name='genius',
     )
     songs_to_search = sql_table(
-        dlt.secrets['sources.postgres.credentials'],
+        dlt.secrets['sources.bigquery.credentials'],
         table='songs_incomplete',
         schema='genius',
         included_columns=['id', 'title', 'primary_artist_names'],
-        backend='connectorx',
-        backend_kwargs={'conn': dlt.secrets['sources.postgres.credentials']},
+        backend='pyarrow',
     )
     pipeline.run(
         songs_to_search.add_map(
@@ -727,14 +722,13 @@ def get_lyrics_task() -> dict[str, int]:
     """
     log = logging.getLogger('airflow.task')
     pipeline = dlt.pipeline(
-        'genius_lyrics', destination=dlt.destinations.postgres(), dataset_name='genius'
+        'genius_lyrics', destination=dlt.destinations.bigquery(), dataset_name='genius'
     )
     songs_to_search = sql_table(
-        dlt.secrets['sources.postgres.credentials'],
+        dlt.secrets['sources.bigquery.credentials'],
         table='songs_no_lyrics',
         schema='genius',
-        backend='connectorx',
-        backend_kwargs={'conn': dlt.secrets['sources.postgres.credentials']},
+        backend='pyarrow',
     )
     pipeline.run(
         songs_to_search | get_lyrics,

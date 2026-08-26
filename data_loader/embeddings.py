@@ -118,7 +118,14 @@ def _build_prompt(
         return pl.format('title: {} | text: {}', title, content)
 
 
-def _wait_for_job(job_name: str, client: Client, wait_time=60) -> BatchJob:
+def _get_job_state(job: BatchJob) -> JobState:
+    """Get a job's state (without polling). ValueError if state is missing"""
+    if not (job_state := job.state):
+        raise ValueError('Job state missing: %s', job)
+    return job_state
+
+
+def _wait_for_job(job_name: str, client: Client, wait_time=60) -> BatchJob:  # pyright: ignore[reportReturnType]
     """Wait for batch job to finish, then return the finished job"""
     log = logging.getLogger(__name__)
 
@@ -131,23 +138,22 @@ def _wait_for_job(job_name: str, client: Client, wait_time=60) -> BatchJob:
         'waiting for batch job',
         unit=' polls',
     ):
-        assert job.state
-        if job.state.name in ('JOB_STATE_PENDING', 'JOB_STATE_RUNNING'):
-            log.debug(f'Job {job.name}: {job.state.name}, waiting {wait_time} secs...')
+        job_state = _get_job_state(job)
+        if job_state.name in (JobState.JOB_STATE_PENDING, JobState.JOB_STATE_RUNNING):
+            log.debug(f'Job {job.name}: {job_state.name}, waiting {wait_time} secs...')
             sleep(wait_time)
-        elif job.state.name == 'JOB_STATE_SUCCEEDED':
+        elif job_state.name == JobState.JOB_STATE_SUCCEEDED:
             log.info(f'Job {job.name} SUCCEEDED')
-            break
-        elif job.state.name == 'JOB_STATE_CANCELLED':
+            return job
+        elif job_state.name == JobState.JOB_STATE_CANCELLED:
             log.warning(f'Job {job.name} CANCELLED')
-            break
-        elif job.state.name == 'JOB_STATE_FAILED':
+            return job
+        elif job_state.name == JobState.JOB_STATE_FAILED:
             log.error(job.error)
-            break
+            return job
         else:
-            log.error(f'Job {job.name} unknown state: {job.state.name}')
-            break
-    return job
+            log.error(f'Job {job.name} unknown state: {job_state.name}')
+            return job
 
 
 def _job_to_dict(job: BatchJob) -> dict:
@@ -601,17 +607,17 @@ def embed_lyrics_refresh_task(
     pipeline = dlt.pipeline(
         pipeline_name,
         dataset_name=DB_SCHEMA,
-        destination=dlt.destinations.postgres(),
+        destination=dlt.destinations.bigquery(),
         import_schema_path='schemas/import',
         # export_schema_path='schemas/export',
     )
 
     active_jobs = sql_table(
-        dlt.secrets['sources.postgres.credentials'],
+        dlt.secrets['sources.bigquery.credentials'],
         table=jobs_table,
         schema=DB_SCHEMA,
         included_columns=['name', 'state'],
-        backend='sqlalchemy',
+        backend='pyarrow',
     )
     if drop_completed:
         active_jobs = active_jobs.add_filter(
@@ -661,17 +667,17 @@ def embed_lyrics_extract_task(
     pipeline = dlt.pipeline(
         pipeline_name,
         dataset_name=DB_SCHEMA,
-        destination=dlt.destinations.postgres(),
+        destination=dlt.destinations.bigquery(),
         # destination=dlt.destinations.duckdb(),
         # dev_mode=True,
     )
 
     active_jobs = sql_table(
-        dlt.secrets['sources.postgres.credentials'],
+        dlt.secrets['sources.bigquery.credentials'],
         table=jobs_table,
         schema=DB_SCHEMA,
         included_columns=['name', 'state'],
-        backend='sqlalchemy',
+        backend='pyarrow',
     )
 
     pipeline.extract(
@@ -719,22 +725,17 @@ def embed_lyrics_submit_task(
     pipeline = dlt.pipeline(
         pipeline_name,
         dataset_name=DB_SCHEMA,
-        destination=dlt.destinations.postgres(),
+        destination=dlt.destinations.bigquery(),
         # destination=dlt.destinations.duckdb(),
         # dev_mode=True,
     )
 
     lyrics_to_embed = sql_table(
-        dlt.secrets['sources.postgres.credentials'],
+        dlt.secrets['sources.bigquery.credentials'],
         table=lyrics_table,
         schema=DB_SCHEMA,
         included_columns=['id', 'lyrics'],
-        backend='connectorx',
-        chunk_size=MAX_JOB_SIZE,
-        backend_kwargs={
-            'conn': dlt.secrets['sources.postgres.credentials'],
-            'return_type': 'arrow_stream',
-        },
+        backend='pyarrow',
     )
     log.info(f'Submitting (at most) {n_new_jobs} new jobs')
     pipeline.run(
