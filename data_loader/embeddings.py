@@ -1,5 +1,7 @@
+import io
 import json
 import logging
+from collections.abc import Iterator
 from enum import StrEnum
 from io import StringIO
 from pathlib import Path
@@ -16,6 +18,7 @@ from airflow.sdk import task, task_group
 from dlt import transformer
 from dlt.sources.sql_database import sql_table
 from google import genai
+from google.cloud import bigquery
 from google.genai import Client
 from google.genai.errors import ClientError
 from google.genai.types import BatchJob, JobState
@@ -166,14 +169,14 @@ def _job_to_dict(job: BatchJob) -> dict:
 
 def _extract_from_batch_file(
     job_name: str, client: Client | None = None, delete_finished=False
-):
+) -> pl.DataFrame | None:
     """
     Check a background batch embeddings job.
     If it's finished, return the embeddings as a table (id, embedding)
     If not finished, return None
 
     :param job_name: name of the job to check
-    :param gemini: Gemini API client
+    :param client: Gemini API client
     :param delete_finished: delete completed job after extracting embeddings (default False)
 
     :returns: `pyarrow.Table` with columns `(id, embedding)`
@@ -202,7 +205,6 @@ def _extract_from_batch_file(
             .struct['values']
             .cast(pl.List(pl.Float64())),
         )
-        emb = emb.to_arrow()
     elif job.state in (JobState.JOB_STATE_PENDING, JobState.JOB_STATE_RUNNING):
         log.info(f'Job {job_name} in progress... ({job.state})')
     elif job.state == JobState.JOB_STATE_CANCELLED:
@@ -361,7 +363,9 @@ def submit_batch_file_job(
 
 
 @transformer
-def retrieve_batch_file_job(jobs, client: Client | None = None, delete_finished=True):
+def retrieve_batch_file_job(
+    jobs, client: Client | None = None, delete_finished=True
+) -> Iterator[pl.DataFrame]:
     """
     Check a background batch embeddings job.
     If it's finished, return the embeddings as a table (id, embedding)
@@ -373,13 +377,16 @@ def retrieve_batch_file_job(jobs, client: Client | None = None, delete_finished=
 
     :returns: Table with columns `(id, embedding)`
     """
+    log = logging.getLogger(__name__)
     client = client or _make_client()
     for job in jobs:
         emb = _extract_from_batch_file(
             job['name'], client, delete_finished=delete_finished
         )
-        if emb:
-            yield emb
+        if emb is None:
+            log.warning(f'Job not extracted ({job["name"]}, state={job["state"]})')
+            continue
+        yield emb
 
 
 @transformer
@@ -536,7 +543,7 @@ def _load_embeddings_to_pg(job_files: list[Path], table, schema, staging_schema=
         cxn.commit()
 
 
-def _load_embeddings_to_bq(job_files: list[Path], table, dset, staging_table=None):
+def _load_embeddings_to_bq(job_files: list[Path], dest_table, dset, staging_table=None):
     """
     Load normalized embeddings into bigquery
     Load to a staging table, then upsert into main table
@@ -548,36 +555,32 @@ def _load_embeddings_to_bq(job_files: list[Path], table, dset, staging_table=Non
         staging_schema: schema to use for staging table
     """
     log = logging.getLogger(__name__)
-    staging_table = staging_table or '_staging_' + table
-    dest_table_full = f'`{dset}.{table}`'
-    staging_table_full = f'`{dset}.{staging_table}`'
-
-    with dbapi.connect(
-        dlt.secrets['destination.bigquery.credentials'], autocommit=False
-    ) as cxn:
-        with cxn.cursor() as cur:
-            n_ingest = cur.adbc_ingest(
-                table,
-                pl.scan_parquet(job_files).unique('id').collect().to_arrow(),
-                mode='replace',
-                db_schema_name=dset,
-            )
-        cxn.commit()
-        log.info(f'Wrote {n_ingest} records to {staging_table_full}')
-        with cxn.cursor() as cur:
-            cur.execute(
-                f'CREATE TABLE IF NOT EXISTS {dest_table_full} (id bigint primary key, embedding float[])'
-            )
-            merge_res = cur.execute(f"""MERGE {dest_table_full} t
-                        USING {staging_table_full} stg ON t.id = stg.id
-                        WHEN NOT MATCHED THEN
-                        INSERT (id, embedding) VALUES(stg.id, stg.embedding)
-                        WHEN MATCHED AND t.embedding != stg.embedding THEN
-                        UPDATE SET embedding = stg.embedding;
-                        SELECT @@row_count AS affected_rows;""").fetch_polars()
-        merge_res = merge_res.select('affected_rows').item()
-        log.info(f'{table} staging -> main merge: {merge_res}')
-        cxn.commit()
+    staging_table = staging_table or '_staging_' + dest_table
+    dest_table_full = f'{dset}.{dest_table}'
+    staging_table_full = f'{dset}.{staging_table}'
+    client = bigquery.Client(project=dlt.secrets['gcloud.project_id'])
+    opts = bigquery.format_options.ParquetOptions()  # pyright: ignore[reportAttributeAccessIssue]
+    opts.enable_list_inference = True  # convert arrow lists to bq arrays
+    buf = io.BytesIO()
+    pl.scan_parquet(job_files).unique('id').sink_parquet(buf)
+    buf.seek(0)
+    job_config = bigquery.LoadJobConfig(
+        source_format=bigquery.SourceFormat.PARQUET,
+        parquet_options=opts,
+        write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE,
+    )
+    job = client.load_table_from_file(buf, staging_table_full, job_config=job_config)
+    job = job.result()  # wait for load to finish
+    merge_query = f"""
+        MERGE {dest_table_full} t
+        USING {staging_table_full} stg ON t.id = stg.id
+        WHEN NOT MATCHED THEN
+        INSERT (id, embedding) VALUES(stg.id, stg.embedding)
+        WHEN MATCHED THEN
+        UPDATE SET embedding = stg.embedding"""
+    merge_res = client.query_and_wait(merge_query)
+    n_merged = merge_res.num_dml_affected_rows
+    log.info(f'merged {n_merged} rows from {staging_table_full} to {dest_table_full}')
 
 
 def _load_all_normalized(pipeline: dlt.Pipeline, tables, clear_after_load=True):
@@ -617,7 +620,7 @@ def _load_all_normalized(pipeline: dlt.Pipeline, tables, clear_after_load=True):
             job_files = sorted(load_pkg_dir.glob(f'{table}.*.parquet'))
             if any(job_files):
                 log.debug(f'Files to load: {job_files}')
-                load_fn(job_files, table=table, schema=pipeline.dataset_name)
+                load_fn(job_files, table, pipeline.dataset_name)
             else:
                 log.warning('No normalized parquet files found for `lyrics_embed`')
 
@@ -663,7 +666,7 @@ def embed_lyrics_refresh_task(
         table=jobs_table,
         schema=DB_SCHEMA,
         included_columns=['name', 'state'],
-        backend='pyarrow',
+        backend='sqlalchemy',
     )
     if drop_completed:
         active_jobs = active_jobs.add_filter(
@@ -714,8 +717,6 @@ def embed_lyrics_extract_task(
         pipeline_name,
         dataset_name=DB_SCHEMA,
         destination=dlt.destinations.bigquery(),
-        # destination=dlt.destinations.duckdb(),
-        # dev_mode=True,
     )
 
     active_jobs = sql_table(
@@ -723,7 +724,7 @@ def embed_lyrics_extract_task(
         table=jobs_table,
         schema=DB_SCHEMA,
         included_columns=['name', 'state'],
-        backend='pyarrow',
+        backend='sqlalchemy',  # returns list[dict] so we can filter rows
     )
 
     pipeline.extract(
@@ -835,6 +836,6 @@ def make_embed_task_group(
 
 
 if __name__ == '__main__':
-    embed_lyrics_refresh_task.function(embed_task=None)
-    embed_lyrics_extract_task.function(embed_task=None, delete_finished=True)
+    embed_lyrics_refresh_task.function(embed_task=None, drop_completed=False)
+    embed_lyrics_extract_task.function(embed_task=None, delete_finished=False)
     embed_lyrics_submit_task.function(embed_task=None, n_new_jobs=2)
