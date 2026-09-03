@@ -7,7 +7,7 @@
       "*.env": "deny",
       "*.env.*": "deny",
       "*.env.example": "allow",
-      "secrets.toml": "deny",
+      "*/secrets.toml": "deny",
       "keys/**": "deny",
     },
   },
