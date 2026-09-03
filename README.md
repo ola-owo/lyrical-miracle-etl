@@ -1,8 +1,6 @@
 # Lyrical Miracle ETL Pipeline
 
-## Summary
-
-This is an ETL pipeline that pulls recent LastFM listening history and processes it
+This is an ETL pipeline that pulls my recent music listening history and processes it
 for downstream analyses.
 
 ## Pipeline breakdown
@@ -13,13 +11,14 @@ for downstream analyses.
 1. `match_search_results`: Fuzzy-match search queries and results from the previous step
 1. `get_lyrics`: Retrieve song lyrics from Genius
 1. `embed_lyrics`: Convert lyrics to embeddings using Gemini
+1. `big5`: Get Big-5 scores of song lyrics using a custom model hosted on Agent Platform
 
 Results of each task in are saved to a postgresql database.
 
 ## How to run
 
-The entire pipeline can be run in a single Docker container
-based on the official [Airflow community image](https://airflow.apache.org/docs/docker-stack/index.html).
+The entire pipeline can be run in a single Docker container based on the official
+[Airflow community image](https://airflow.apache.org/docs/docker-stack/index.html).
 
 Build the image:
 
