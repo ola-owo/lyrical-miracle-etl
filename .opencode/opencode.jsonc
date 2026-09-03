@@ -8,6 +8,7 @@
       "*.env.*": "deny",
       "*.env.example": "allow",
       "secrets.toml": "deny",
+      "keys/**": "deny",
     },
   },
   "mcp": {
