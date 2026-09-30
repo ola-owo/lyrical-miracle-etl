@@ -751,7 +751,7 @@ wheels = [
 
 [[package]]
 name = "data-loader"
-version = "0.4.0"
+version = "0.5.0"
 source = { editable = "." }
 dependencies = [
     { name = "adbc-driver-bigquery" },
@@ -794,7 +794,7 @@ requires-dist = [
     { name = "google-cloud-bigquery", specifier = ">=3.42.0" },
     { name = "google-cloud-bigquery-storage", specifier = ">=2.41.0" },
     { name = "google-genai", specifier = ">=2.4.0" },
-    { name = "lyricsgenius", specifier = ">=3.12.1" },
+    { name = "lyricsgenius", specifier = ">=3.14.0" },
     { name = "numpy", specifier = ">=2.4.6" },
     { name = "polars", specifier = ">=1.40.1" },
     { name = "pyarrow", specifier = ">=24.0.0" },
@@ -1760,15 +1760,15 @@ wheels = [
 
 [[package]]
 name = "lyricsgenius"
-version = "3.12.2"
+version = "3.14.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "beautifulsoup4" },
     { name = "requests" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/54/63/21b4712997061c2207cd3a78ee2365f32fa50750f306d6756a3c1e846ca7/lyricsgenius-3.12.2.tar.gz", hash = "sha256:9a2a26c98e93b98ed3b65364e8e10627bb6e600c26e36ee8d0edb4bbd5b9ea2c", size = 518476, upload-time = "2026-05-22T13:57:58.207Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/6c/3e/ed4f700f6e6cae33b51aa69f92374112d3feb2b2aad0b5f24a6110ab71a3/lyricsgenius-3.14.0.tar.gz", hash = "sha256:2fc35f4fc26fd1d163a5ff2ab6743cb972256d91fcd96b132cead28e595cdaf1", size = 522085, upload-time = "2026-09-22T00:38:37.24Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/88/2e/a084420f5e3c39817a6c501ecbe78c68cb5a83f05f26580acf8b453ee3c0/lyricsgenius-3.12.2-py3-none-any.whl", hash = "sha256:9d74e0245d70c67986cf772a996c04ac2f4125efff7154f901ae48385b4b3ad6", size = 50652, upload-time = "2026-05-22T13:57:56.835Z" },
+    { url = "https://files.pythonhosted.org/packages/f5/32/6869cb93fd4f1a038f1e1d7c33f81617f99042dd8c19776545e517c41708/lyricsgenius-3.14.0-py3-none-any.whl", hash = "sha256:3917f1b5cf299247b79ecb19a1b5abc303f8d479b58bbcf2a1c6242a1433f83d", size = 50860, upload-time = "2026-09-22T00:38:35.61Z" },
 ]
 
 [[package]]
