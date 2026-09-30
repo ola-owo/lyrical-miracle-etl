@@ -62,11 +62,20 @@ def make_genius_client(
     sleep_time=1.0,
     timeout=15,
     retries=1,
+    use_proxy=False,
     **kwargs,
 ) -> Genius:
     """Build the lyricsgenius client"""
     excluded_terms = excluded_terms.copy()
     excluded_terms.remove('instrumental')
+    proxy_url = '{}://{}:{}@{}:{}'.format(
+        dlt.config['genius.proxy.protocol'],
+        dlt.secrets['genius.proxy.user'],
+        dlt.secrets['genius.proxy.password'],
+        dlt.secrets['genius.proxy.domain'],
+        dlt.secrets['genius.proxy.port'],
+    )
+    proxies = {'http': proxy_url, 'https': proxy_url} if use_proxy else {}
     client = Genius(
         dlt.secrets['sources.genius.token'],
         remove_section_headers=remove_section_headers,
@@ -82,7 +91,7 @@ def make_genius_client(
     client._session = Client(  # pyright: ignore[reportAttributeAccessIssue]
         request_timeout=10,
         respect_retry_after_header=True,
-        session_attrs={'headers': client._session.headers},
+        session_attrs={'headers': client._session.headers, 'proxies': proxies},
     )
     return client
 
@@ -532,7 +541,7 @@ def get_song_metadata(songs):
     n_search = df_genius_song_matches.height
     log.info(f'Looking up {n_search} songs')
 
-    gen = make_genius_client(sleep_time=0.5)
+    gen = make_genius_client(sleep_time=0.5, use_proxy=False)
     for song in tqdm(
         df_genius_song_matches.iter_rows(named=True),
         total=n_search,
@@ -668,7 +677,7 @@ def get_lyrics(songs):
     # df_lyrics = df_lyrics.filter((pl.col('g_release_date') > release_date_cutoff)
     #                              | pl.col('g_release_date').is_null())
 
-    genius = make_genius_client(sleep_time=2)
+    genius = make_genius_client(sleep_time=2, use_proxy=True)
     for song in tqdm(
         songs.iter_rows(named=True),
         total=songs.height,
