@@ -19,6 +19,7 @@ dependencies = [
     "polars>=1.40.1",
     "pyarrow>=24.0.0",
     "rapidfuzz>=3.14.5",
+    "scikit-learn>=1.9.1",
     "scipy>=1.17.1",
     "sqlalchemy-bigquery>=1.17.2",
     "tqdm>=4.67.3",
