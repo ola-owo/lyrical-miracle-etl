@@ -54,7 +54,6 @@ def big5_ping(endpoint: aiplatform.Endpoint | None = None):
     key_prefix='genius',
     name='big5_ping',
     group_name='big5',
-    deps=[dg.AssetKey(['genius', 'lyrics'])],
     description='Wake up the Big5 model endpoint so inference requests are not queued.',
 )
 def big5_ping_asset():
@@ -105,7 +104,7 @@ def big5_predict_online(
     key_prefix='genius',
     name='lyrics_big5',
     group_name='big5',
-    deps=[dg.AssetKey(['genius', 'big5_ping'])],
+    deps=[dg.AssetKey(['genius', 'lyrics'])],
     description='Predict Big-5 personality scores for new lyrics. Merge into `genius.lyrics_big5`.',
 )
 def lyrics_big5_asset(
