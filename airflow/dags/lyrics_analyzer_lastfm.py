@@ -4,6 +4,7 @@ import pendulum as pnd
 from airflow.sdk import CronDataIntervalTimetable, dag
 
 from data_loader.big5 import big5_predict_task
+from data_loader.clustering import cluster_task
 from data_loader.embeddings import (
     MAX_EMBED_LYRICS_JOBS,
     EmbeddingTask,
@@ -40,8 +41,9 @@ def lyrics_analyzer_lastfm():
         >> (
             [make_embed_task_group(task, n_new_jobs=n_jobs) for task in EMBEDDING_TYPES]
             + [big5_predict_task()]
-        )
-    )  # pyright: ignore[reportUnusedExpression, reportOperatorIssue]
+        )  # pyright: ignore[reportOperatorIssue, reportUnusedExpression]
+        >> cluster_task(replace=False)
+    )
 
 
 lyrics_analyzer_lastfm()
