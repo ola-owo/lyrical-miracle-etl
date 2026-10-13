@@ -26,6 +26,36 @@ def _check_predict_inputs(texts: pl.DataFrame):
         raise ValueError('Null batch inputs detected')
 
 
+def _init_endpoint() -> aiplatform.Endpoint:
+    """initialize model endpoint"""
+    log = logging.getLogger(__name__)
+    log.debug('Initializing endpoint...')
+    aiplatform.init(
+        project=dlt.secrets['gcloud.project_id'],
+        location=dlt.secrets['gcloud.region'],
+    )
+    return aiplatform.Endpoint(
+        'projects/{}/locations/{}/endpoints/{}'.format(
+            dlt.secrets['gcloud.project_id'],
+            dlt.secrets['gcloud.region'],
+            dlt.secrets['gcloud.big5_endpoint'],
+        )
+    )
+
+
+def big5_ping(endpoint: aiplatform.Endpoint | None = None):
+    """Send an empty request to the model to wake up the endpoint"""
+    if not endpoint:
+        endpoint = _init_endpoint()
+    endpoint.predict(instances=[])
+
+
+@task
+def big5_ping_task():
+    """Spin up the big5 model"""
+    big5_ping()
+
+
 @transformer
 def big5_predict_online(
     texts: pl.DataFrame, endpoint: aiplatform.Endpoint | None = None
@@ -42,18 +72,7 @@ def big5_predict_online(
     _check_predict_inputs(texts_df)
 
     if not endpoint:
-        log.debug('Initializing endpoint...')
-        aiplatform.init(
-            project=dlt.secrets['gcloud.project_id'],
-            location=dlt.secrets['gcloud.region'],
-        )
-        endpoint = aiplatform.Endpoint(
-            'projects/{}/locations/{}/endpoints/{}'.format(
-                dlt.secrets['gcloud.project_id'],
-                dlt.secrets['gcloud.region'],
-                dlt.secrets['gcloud.big5_endpoint'],
-            )
-        )
+        endpoint = _init_endpoint()
 
     params = {'include_text': False, 'include_traits': False}
     n_batches = ceil(texts_df.height / REQUEST_BATCH_SIZE)
