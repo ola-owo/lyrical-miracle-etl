@@ -14,7 +14,7 @@ for downstream analyses.
 1. `embed_lyrics`: Convert lyrics to embeddings using Gemini
 1. `big5`: Get Big-5 scores of song lyrics using a custom model hosted on Agent Platform
 
-Results of each task in are saved to a postgresql database.
+Ingested data is stored in BigQuery, and Airflow metadata is saved in PostgreSQL.
 
 ## How to run
 

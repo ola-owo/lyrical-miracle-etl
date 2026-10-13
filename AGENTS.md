@@ -10,7 +10,8 @@ for downstream analyses.
 - airflow: pipeline orchestration
 - [`dlt`](https://dlthub.com/docs/llms.txt): data extraction, transformation, and loading
 - [`neon`](https://neon.com/docs/llms.txt): postgresql database,
-  contains pipeline data and airflow metadata
+  contains airflow metadata
+- bigquery: stores ingested data
 - `polars` and `pyarrow`: dataframe manipulation
 - `sqlalchemy` and `psycopg2`: storing/loading pipeline data from postgres
 - duckdb: storing/loading data locally when testing
