@@ -1,9 +1,9 @@
 import logging
 from math import ceil
 
+import dagster as dg
 import dlt
 import polars as pl
-from airflow.sdk import task
 from dlt import transformer
 from dlt.common.libs.pyarrow import rename_columns
 from dlt.sources.sql_database import sql_table
@@ -50,8 +50,14 @@ def big5_ping(endpoint: aiplatform.Endpoint | None = None):
     endpoint.predict(instances=[])
 
 
-@task
-def big5_ping_task():
+@dg.asset(
+    key_prefix='genius',
+    name='big5_ping',
+    group_name='big5',
+    deps=[dg.AssetKey(['genius', 'lyrics'])],
+    description='Wake up the Big5 model endpoint so inference requests are not queued.',
+)
+def big5_ping_asset():
     """Spin up the big5 model"""
     big5_ping()
 
@@ -95,12 +101,21 @@ def big5_predict_online(
         yield preds.to_dicts()
 
 
-@task
-def big5_predict_task() -> dict[str, int]:
+@dg.asset(
+    key_prefix='genius',
+    name='lyrics_big5',
+    group_name='big5',
+    deps=[dg.AssetKey(['genius', 'big5_ping'])],
+    description='Predict Big-5 personality scores for new lyrics. Merge into `genius.lyrics_big5`.',
+)
+def lyrics_big5_asset(
+    context: dg.AssetExecutionContext,
+) -> dg.MaterializeResult[dict[str, int]]:
     """
-    Get new big5 predictions using online inference
+    Get new big5 predictions using online inference.
+    Write results to `genius.lyrics_big5`
     """
-    log = logging.getLogger('airflow.task')
+    log = context.log
     LYRICS_TABLE = 'lyrics_no_big5'
 
     lyrics_to_embed = sql_table(
@@ -125,8 +140,4 @@ def big5_predict_task() -> dict[str, int]:
     )
     row_counts = get_normalize_row_counts(pipeline)
     log.info(f'row counts: {row_counts}')
-    return row_counts
-
-
-if __name__ == '__main__':
-    big5_predict_task.function()
+    return dg.MaterializeResult(metadata={'row_counts': row_counts}, value=row_counts)

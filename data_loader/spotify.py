@@ -4,7 +4,6 @@ from typing import Any
 
 import dlt
 import pendulum as pn
-from airflow.sdk import task
 from dlt import resource, source, transformer
 from dlt.common.configuration import configspec
 from dlt.sources.helpers.rest_client.auth import OAuth2ClientCredentials
@@ -156,7 +155,6 @@ def spotify_recents(
     )
 
 
-@task
 def recent_spotify_tracks(
     start_time: pn.DateTime | None = None, end_time: pn.DateTime | None = None
 ) -> bool:

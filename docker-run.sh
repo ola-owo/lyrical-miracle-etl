@@ -1,7 +1,6 @@
 # Start the docker container
-exec docker run --rm -it -p 8080:8080 --env-file .env \
-  --mount type=volume,src=airflow-logs,dst=/opt/airflow/logs \
+exec docker run --rm -it -p 3000:3000 --env-file .env \
+  --mount type=volume,src=dagster-logs,dst=/opt/dagster/home/storage \
   --mount type=bind,src=$(pwd)/data,dst=/data,ro \
-  --mount type=bind,src=$(pwd)/keys,dst=/opt/airflow/keys,ro \
-  --mount type=bind,src=$(pwd)/airflow/dags,dst=/opt/airflow/dags,ro \
-  lyrical-miracle-etl standalone
+  --mount type=bind,src=$(pwd)/keys,dst=/opt/dagster/app/keys,ro \
+  lyrical-miracle-etl

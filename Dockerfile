@@ -1,36 +1,35 @@
-FROM apache/airflow:slim-3.2.2-python3.14
+FROM python:3.14-slim
 
-ARG DATA_DIR=/data \
-    AIRFLOW_PORT=8080
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+ARG DATA_DIR=/data
 ENV PYTHONUNBUFFERED=1 \
-    AIRFLOW_HOME=/opt/airflow \
-    AIRFLOW__CORE__DAGS_FOLDER=${AIRFLOW_HOME}/dags \
-    AIRFLOW__CORE__LOAD_EXAMPLES=False \
-    AIRFLOW__CORE__EXECUTOR=LocalExecutor \
-    AIRFLOW__LOGGING__BASE_LOG_FOLDER=${AIRFLOW_HOME}/logs \
-    AIRFLOW__API__PORT=$AIRFLOW_PORT \
+    DAGSTER_HOME=/opt/dagster/home \
     UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
     UV_NO_CACHE=1 \
     UV_LOCKED=1 \
     UV_NO_DEV=1
 
-WORKDIR ${AIRFLOW_HOME}
+WORKDIR /opt/dagster/app
 COPY pyproject.toml uv.lock ./
-RUN uv venv --system-site-packages && \
-    uv sync --active --no-install-project
+RUN uv sync --no-install-project
 COPY data_loader/ ./data_loader/
-RUN uv sync --active
+RUN uv sync
 
 COPY schemas/ ./schemas/
 COPY .dlt/ ./.dlt/
+COPY dagster.yaml entrypoint.sh /opt/dagster/home/
 
 USER root
-RUN mkdir -p ${AIRFLOW__LOGGING__BASE_LOG_FOLDER} ${DATA_DIR} && \
-    chown -R airflow:0 ${AIRFLOW__LOGGING__BASE_LOG_FOLDER} ${DATA_DIR} && \
-    chown -R airflow:0 ${AIRFLOW_HOME}
-USER airflow
+RUN useradd --create-home --uid 1000 --gid 0 dagster && \
+    mkdir -p ${DATA_DIR} /opt/dagster/home/storage && \
+    chmod +x /opt/dagster/home/entrypoint.sh && \
+    chown -R dagster:0 /opt/dagster ${DATA_DIR}
+USER dagster
 
-VOLUME ["${AIRFLOW__LOGGING__BASE_LOG_FOLDER}", "${DATA_DIR}"]
+# persist compute logs and data files across container restarts
+VOLUME ["/opt/dagster/home/storage", "${DATA_DIR}"]
 
-EXPOSE $AIRFLOW_PORT
+EXPOSE 3000
+ENTRYPOINT ["/opt/dagster/home/entrypoint.sh"]

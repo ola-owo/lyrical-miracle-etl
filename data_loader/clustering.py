@@ -1,10 +1,10 @@
 import io
 import logging
 
+import dagster as dg
 import dlt
 import numpy as np
 import polars as pl
-from airflow.sdk import task
 from google.cloud import bigquery
 from sklearn.cluster import KMeans
 
@@ -238,34 +238,62 @@ def _get_centroids() -> np.ndarray:
     return centroids['centroid'].to_numpy()
 
 
-@task
-def cluster_task(
-    replace=False, n_clusters=N_CLUSTERS, random_seed=RANDOM_SEED
-) -> dict[str, int]:
+class ClusterConfig(dg.Config):
+    """
+    Run config for the lyrics clustering asset
+
+    Args:
+        replace: cluster all embeddings and generate new centroids (True), or
+            incrementally label unclustered embeddings using existing
+            centroids (False)
+        n_clusters: number of clusters (ignored if replace=False)
+        random_seed: random seed passed to KMeans (ignored if replace=False)
+    """
+
+    replace: bool = False
+    n_clusters: int = N_CLUSTERS
+    random_seed: int = RANDOM_SEED
+
+
+@dg.asset(
+    key_prefix='genius',
+    name='lyrics_clusters',
+    group_name='clustering',
+    deps=[dg.AssetKey(['genius', 'lyrics_embed_clustering'])],
+    description=(
+        'Label lyrics embeddings with K-means clusters. '
+        'A full recluster (replace=True) also rewrites `genius.lyrics_cluster_centroids`.'
+    ),
+)
+def lyrics_clusters_asset(
+    context: dg.AssetExecutionContext, config: ClusterConfig
+) -> dg.MaterializeResult[dict[str, int]]:
     """
     Run KMeans clustering on lyrics embeddings.
+    Write cluster labels to `genius.lyrics_clusters`; with replace=True,
+    also write new centroids to `genius.lyrics_cluster_centroids`.
 
     Args:
         replace: if true, cluster all embeddings and generate new centroids.
-            if false, use existing centroids and process un-clustered embeddings only.
-        n_clusters: number of clusters (ignored if replace=False)
-        random_seed: random seed passed to KMeans (ignored if replace=False)
+            if false, use existing centroids and process un-clustered
+            embeddings only (requires centroids to exist).
 
     Returns: row counts by table
     """
-    log = logging.getLogger('airflow.task')
+    log = context.log
+    replace = config.replace
 
     embeddings = get_embeddings(fetch_all=replace)
     embeddings_arr = embeddings['embedding'].to_numpy()
     if embeddings.height == 0:
         log.warning('No embeddings to cluster, exiting.')
-        return {}
+        return dg.MaterializeResult(metadata={'row_counts': {}}, value={})
 
     if replace:
         km = run_kmeans(
             embeddings_arr,
-            n_clusters=n_clusters,
-            random_seed=random_seed,
+            n_clusters=config.n_clusters,
+            random_seed=config.random_seed,
         )
         km_dfs = kmeans_to_dataframe(km, embeddings['id'], km.labels_)
     else:
@@ -280,8 +308,4 @@ def cluster_task(
         km_dfs['labels'], km_dfs['centroids'], replace=replace
     )
     log.info(f'row counts: {row_counts}')
-    return row_counts
-
-
-if __name__ == '__main__':
-    cluster_task.function(replace=True)
+    return dg.MaterializeResult(metadata={'row_counts': row_counts}, value=row_counts)
