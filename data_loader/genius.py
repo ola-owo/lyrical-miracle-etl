@@ -3,13 +3,13 @@ from pathlib import Path
 from random import random
 from time import sleep
 
+import dagster as dg
 import dlt
 import numpy as np
 import polars as pl
 import polars.selectors as cs
 import pyarrow as pa
 import rapidfuzz as fuzz
-from airflow.sdk import task
 from dlt import transformer
 from dlt.sources.helpers.requests import HTTPError
 from dlt.sources.helpers.requests.retry import Client
@@ -269,15 +269,21 @@ def match_to_dataset(search_queries: pa.Table):
     return matches.collect().to_dicts()
 
 
-@task
-def match_to_dataset_task() -> dict[str, int]:
+@dg.asset(
+    key_prefix='lastfm',
+    name='genius_matches_from_dataset',
+    group_name='lastfm',
+    deps=[dg.AssetKey(['lastfm', 'scrobbles'])],
+    description='Merge scrobbles matched against the Genius dataset into `lastfm.genius_matches`.',
+)
+def matches_from_dataset_asset(
+    context: dg.AssetExecutionContext,
+) -> dg.MaterializeResult[dict[str, int]]:
     """
     Find newly added scrobbles and try to match them against the Genius dataset.
     Write the results to `lastfm.genius_matches`
-
-    Returns: row counts for all normalized tables.
     """
-    log = logging.getLogger('airflow.task')
+    log = context.log
     unsearched_songs = sql_table(
         dlt.secrets['sources.bigquery.credentials'],
         table='songs_not_searched',
@@ -297,7 +303,7 @@ def match_to_dataset_task() -> dict[str, int]:
 
     row_counts = get_normalize_row_counts(pipeline)
     log.info(f'row counts: {row_counts}')
-    return row_counts
+    return dg.MaterializeResult(metadata={'row_counts': row_counts}, value=row_counts)
 
 
 @transformer
@@ -382,16 +388,22 @@ def genius_search(tracks: pa.Table):
         ).to_dicts()
 
 
-@task
-def genius_search_task() -> dict[str, int]:
+@dg.asset(
+    key_prefix='lastfm',
+    name='genius_searches',
+    group_name='lastfm',
+    deps=[dg.AssetKey(['lastfm', 'genius_matches_from_dataset'])],
+    description='Search Genius for newly scrobbled songs. Append results to `lastfm.genius_searches`.',
+)
+def genius_searches_asset(
+    context: dg.AssetExecutionContext,
+) -> dg.MaterializeResult[dict[str, int]]:
     """
     Search Genius for any newly scrobbled songs.
     Songs that have already been searched in Genius are ignored.
     Write search results to `lastfm.genius_searches`
-
-    Returns: row counts for all normalized tables.
     """
-    log = logging.getLogger('airflow.task')
+    log = context.log
     pipeline = dlt.pipeline('genius_search', destination=dlt.destinations.bigquery())
     unsearched_songs = sql_table(
         dlt.secrets['sources.bigquery.credentials'],
@@ -408,7 +420,7 @@ def genius_search_task() -> dict[str, int]:
     )
     row_counts = get_normalize_row_counts(pipeline)
     log.info(f'row counts: {row_counts}')
-    return row_counts
+    return dg.MaterializeResult(metadata={'row_counts': row_counts}, value=row_counts)
 
 
 @transformer
@@ -469,15 +481,21 @@ def match_search_results(search_results: pa.Table):
         yield matches.to_dicts()
 
 
-@task
-def match_search_results_task() -> dict[str, int]:
+@dg.asset(
+    key_prefix='lastfm',
+    name='genius_matches_from_search',
+    group_name='lastfm',
+    deps=[dg.AssetKey(['lastfm', 'genius_searches'])],
+    description='Merge scrobbles matched against Genius search results into `lastfm.genius_matches`.',
+)
+def matches_from_search_asset(
+    context: dg.AssetExecutionContext,
+) -> dg.MaterializeResult[dict[str, int]]:
     """
     Match scrobbles to their Genius search results.
     Write results to `lastfm.genius_matches`
-
-    Returns: row counts for all normalized tables.
     """
-    log = logging.getLogger('airflow.task')
+    log = context.log
     pipeline = dlt.pipeline(
         'genius_search', destination=dlt.destinations.bigquery(), dataset_name='lastfm'
     )
@@ -496,7 +514,7 @@ def match_search_results_task() -> dict[str, int]:
     )
     row_counts = get_normalize_row_counts(pipeline)
     log.info(f'row counts: {row_counts}')
-    return row_counts
+    return dg.MaterializeResult(metadata={'row_counts': row_counts}, value=row_counts)
 
 
 @transformer
@@ -587,15 +605,21 @@ def get_song_metadata(songs):
         yield song
 
 
-@task
-def get_song_metadata_task() -> dict[str, int]:
+@dg.asset(
+    key_prefix='genius',
+    name='songs',
+    group_name='genius',
+    deps=[dg.AssetKey(['lastfm', 'genius_matches_from_search'])],
+    description='Get full song metadata for songs that have none. Merge into `genius.songs`.',
+)
+def songs_asset(
+    context: dg.AssetExecutionContext,
+) -> dg.MaterializeResult[dict[str, int]]:
     """
     Get full song metadata for songs that don't already have it.
     Write results to `genius.songs`
-
-    Returns: row counts for all normalized tables.
     """
-    log = logging.getLogger('airflow.task')
+    log = context.log
     pipeline = dlt.pipeline(
         'genius_song_meta',
         destination=dlt.destinations.bigquery(),
@@ -618,18 +642,19 @@ def get_song_metadata_task() -> dict[str, int]:
     )
     row_counts = get_normalize_row_counts(pipeline)
     log.info(f'row counts: {row_counts}')
-    return row_counts
+    return dg.MaterializeResult(metadata={'row_counts': row_counts}, value=row_counts)
 
 
-@task
-def recheck_incomplete_songs_task() -> dict[str, int]:
+def recheck_incomplete_songs() -> dict[str, int]:
     """
     Re-retrieve song metadata for songs not tagged as having complete lyrics.
     Write results to `genius.songs`
 
+    Not wired into the pipeline; run directly (e.g. in a REPL) when needed.
+
     Returns: row counts for all normalized tables.
     """
-    log = logging.getLogger('airflow.task')
+    log = logging.getLogger(__name__)
     pipeline = dlt.pipeline(
         'genius_incomplete_song_meta',
         destination=dlt.destinations.bigquery(),
@@ -721,15 +746,21 @@ def get_lyrics(songs):
         yield {'id': song_id, 'lyrics': lyrics}
 
 
-@task
-def get_lyrics_task() -> dict[str, int]:
+@dg.asset(
+    key_prefix='genius',
+    name='lyrics',
+    group_name='genius',
+    deps=[dg.AssetKey(['genius', 'songs'])],
+    description='Get lyrics for newly added songs. Append to `genius.lyrics`.',
+)
+def lyrics_asset(
+    context: dg.AssetExecutionContext,
+) -> dg.MaterializeResult[dict[str, int]]:
     """
     Get lyrics of newly added songs.
     Write results to `genius.lyrics`
-
-    Returns: row counts for all normalized tables.
     """
-    log = logging.getLogger('airflow.task')
+    log = context.log
     pipeline = dlt.pipeline(
         'genius_lyrics', destination=dlt.destinations.bigquery(), dataset_name='genius'
     )
@@ -747,4 +778,4 @@ def get_lyrics_task() -> dict[str, int]:
     )
     row_counts = get_normalize_row_counts(pipeline)
     log.info(f'row counts: {row_counts}')
-    return row_counts
+    return dg.MaterializeResult(metadata={'row_counts': row_counts}, value=row_counts)

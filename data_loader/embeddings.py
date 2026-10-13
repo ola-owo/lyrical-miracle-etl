@@ -8,13 +8,13 @@ from pathlib import Path
 from time import sleep
 from warnings import deprecated
 
+import dagster as dg
 import dlt
 import duckdb
 import fsspec
 import polars as pl
 import pyarrow as pa
 from adbc_driver_postgresql import dbapi
-from airflow.sdk import task, task_group
 from dlt import transformer
 from dlt.sources.sql_database import sql_table
 from google import genai
@@ -33,8 +33,8 @@ MAX_CONCURRENT_JOBS = 100
 # recommended embedding sizes are 768, 1536, and 3072 (full size)
 EMBEDDING_DIM = 768
 
-# Airflow task limits
-MAX_EMBED_LYRICS_JOBS = 8  # above 8-10 tends to cause 429s
+# batch-job concurrency limit: above ~8-10 concurrent jobs, Gemini tends to 429
+MAX_EMBED_JOBS = 8  # shared budget across all embed types
 
 
 @deprecated('gemini-embedding-001 model is deprecated')
@@ -629,152 +629,41 @@ def _load_all_normalized(pipeline: dlt.Pipeline, tables, clear_after_load=True):
             load_storage.complete_load_package(load_id, aborted=False)
 
 
-@task
-def embed_lyrics_refresh_task(
-    embed_task: EmbeddingTask | None, drop_completed: bool = True
-) -> dict[str, int]:
+def make_embed_assets(
+    embed_task: EmbeddingTask | None, n_new_jobs: int = MAX_EMBED_JOBS
+) -> list[dg.AssetsDefinition]:
     """
-    Refresh all jobs in the Active Embedding Jobs table
+    Build the refresh → extract → submit asset triplet for an embed task type.
 
     Args:
         embed_task: Embedding type
-        drop_completed: Drop jobs that were already complete before refreshing
+        n_new_jobs: Max number of jobs to submit. The Gemini job budget is
+            shared across all embed types, so pass a fraction of
+            MAX_EMBED_LYRICS_JOBS per type.
+
+    Returns: (refresh, extract, submit) assets
     """
-    log = logging.getLogger('airflow.task')
-    gemini = _make_client()
+    assert n_new_jobs <= MAX_CONCURRENT_JOBS
 
-    try:
-        jobs_table = EMBEDDING_JOB_TABLES[embed_task]
-    except KeyError as e:
-        raise NotImplementedError(
-            f'No batch embedding tables configured for task {embed_task}. '
-        ) from e
-
-    pipeline_name = 'embed_lyrics'
-    if embed_task:
-        pipeline_name += '-' + embed_task.replace(' ', '_')
-    pipeline = dlt.pipeline(
-        pipeline_name,
-        dataset_name=DB_SCHEMA,
-        destination=dlt.destinations.bigquery(),
-        import_schema_path='schemas/import',
-        # export_schema_path='schemas/export',
-    )
-
-    active_jobs = sql_table(
-        dlt.secrets['sources.bigquery.credentials'],
-        table=jobs_table,
-        schema=DB_SCHEMA,
-        included_columns=['name', 'state'],
-        backend='sqlalchemy',
-    )
-    if drop_completed:
-        active_jobs = active_jobs.add_filter(
-            lambda job: job['state'] != 'JOB_STATE_SUCCEEDED'
-        )
-
-    pipeline.run(
-        active_jobs | refresh_batch_jobs(gemini),
-        table_name=jobs_table,
-        write_disposition='replace',
-        primary_key='name',
-    )
-
-    row_counts = get_normalize_row_counts(pipeline)
-    log.info(f'row counts: {row_counts}')
-    return row_counts
-
-
-@task
-def embed_lyrics_extract_task(
-    embed_task: EmbeddingTask | None, delete_finished=True
-) -> dict[str, int]:
-    """
-    Extract embeddings from completed batch jobs.
-
-    Args:
-        embed_task: Embedding type
-        delete_finished: Delete completed jobs from the Gemini client's job queue
-
-    Returns:
-        row counts for all normalized tables.
-    """
-    log = logging.getLogger('airflow.task')
-    gemini = _make_client()
+    suffix = '' if embed_task is None else '_' + embed_task.replace(' ', '_')
+    group_name = 'embed_lyrics' + suffix
+    pipeline_name = 'embed_lyrics' + suffix
 
     try:
         jobs_table = EMBEDDING_JOB_TABLES[embed_task]
         embeddings_table = EMBEDDING_TABLES[embed_task]
-    except KeyError as e:
-        raise NotImplementedError(
-            f'No batch embedding tables configured for task {embed_task}. '
-        ) from e
-
-    pipeline_name = 'embed_lyrics'
-    if embed_task:
-        pipeline_name += '-' + embed_task.replace(' ', '_')
-    pipeline = dlt.pipeline(
-        pipeline_name,
-        dataset_name=DB_SCHEMA,
-        destination=dlt.destinations.bigquery(),
-    )
-
-    active_jobs = sql_table(
-        dlt.secrets['sources.bigquery.credentials'],
-        table=jobs_table,
-        schema=DB_SCHEMA,
-        included_columns=['name', 'state'],
-        backend='sqlalchemy',  # returns list[dict] so we can filter rows
-    )
-
-    pipeline.extract(
-        active_jobs.add_filter(lambda job: job['state'] == 'JOB_STATE_SUCCEEDED')
-        | retrieve_batch_file_job(gemini, delete_finished),
-        table_name=embeddings_table,
-        loader_file_format='parquet',
-    )
-    pipeline.normalize()
-    _load_all_normalized(pipeline, embeddings_table)
-    row_counts = get_normalize_row_counts(pipeline)
-    log.info(f'row counts: {row_counts}')
-    return row_counts
-
-
-@task
-def embed_lyrics_submit_task(
-    embed_task: EmbeddingTask | None, n_new_jobs=MAX_EMBED_LYRICS_JOBS
-) -> dict[str, int]:
-    """
-    Submit new lyrics embedding batch jobs.
-
-    Args:
-        embed_task: Embedding type
-        n_jobs_slots: Max number of jobs to submit
-
-    Returns:
-        row counts for all normalized tables.
-    """
-    log = logging.getLogger('airflow.task')
-    assert n_new_jobs <= MAX_CONCURRENT_JOBS
-    gemini = _make_client()
-
-    try:
-        jobs_table = EMBEDDING_JOB_TABLES[embed_task]
         lyrics_table = EMBEDDING_LYRICS_TABLES[embed_task]
     except KeyError as e:
         raise NotImplementedError(
             f'No batch embedding tables configured for task {embed_task}. '
         ) from e
 
-    pipeline_name = 'embed_lyrics'
-    if embed_task:
-        pipeline_name += '-' + embed_task.replace(' ', '_')
-    pipeline = dlt.pipeline(
-        pipeline_name,
-        dataset_name=DB_SCHEMA,
-        destination=dlt.destinations.bigquery(),
-        # destination=dlt.destinations.duckdb(),
-        # dev_mode=True,
+    @dg.asset(
+        key_prefix='genius',
+        name=f'{embeddings_table}_jobs_refresh',
+        group_name=group_name,
+        deps=[dg.AssetKey(['genius', 'lyrics'])],
+        description='Refresh the state of queued lyrics embedding batch jobs.',
     )
 
     lyrics_to_embed = sql_table(
@@ -832,10 +721,121 @@ def make_embed_task_group(
             >> embed_lyrics_submit_task(task, n_new_jobs)
         )
 
-    return embeddings(task)
+        active_jobs = sql_table(
+            dlt.secrets['sources.bigquery.credentials'],
+            table=jobs_table,
+            schema=DB_SCHEMA,
+            included_columns=['name', 'state'],
+            backend='sqlalchemy',
+        ).add_filter(lambda job: job['state'] != 'JOB_STATE_SUCCEEDED')
 
+        pipeline.run(
+            active_jobs | refresh_batch_jobs(gemini),
+            table_name=jobs_table,
+            write_disposition='replace',
+            primary_key='name',
+        )
 
-if __name__ == '__main__':
-    embed_lyrics_refresh_task.function(embed_task=None, drop_completed=False)
-    embed_lyrics_extract_task.function(embed_task=None, delete_finished=False)
-    embed_lyrics_submit_task.function(embed_task=None, n_new_jobs=2)
+        row_counts = get_normalize_row_counts(pipeline)
+        context.log.info(f'row counts: {row_counts}')
+        return dg.MaterializeResult(
+            metadata={'row_counts': row_counts}, value=row_counts
+        )
+
+    @dg.asset(
+        key_prefix='genius',
+        name=embeddings_table,
+        group_name=group_name,
+        deps=[dg.AssetKey(['genius', f'{embeddings_table}_jobs_refresh'])],
+        description=(
+            'Extract embeddings from completed batch jobs into '
+            f'`genius.{embeddings_table}`.'
+        ),
+    )
+    def extract(
+        context: dg.AssetExecutionContext,
+    ) -> dg.MaterializeResult[dict[str, int]]:
+        """
+        Extract embeddings from completed batch jobs and delete the finished
+        jobs from the Gemini job queue. Merge embeddings into `genius.{embeddings_table}`
+        """
+        gemini = _make_client()
+        pipeline = dlt.pipeline(
+            pipeline_name,
+            dataset_name=DB_SCHEMA,
+            destination=dlt.destinations.bigquery(),
+        )
+
+        active_jobs = sql_table(
+            dlt.secrets['sources.bigquery.credentials'],
+            table=jobs_table,
+            schema=DB_SCHEMA,
+            included_columns=['name', 'state'],
+            backend='sqlalchemy',  # returns list[dict] so we can filter rows
+        )
+
+        pipeline.extract(
+            active_jobs.add_filter(lambda job: job['state'] == 'JOB_STATE_SUCCEEDED')
+            | retrieve_batch_file_job(gemini, delete_finished=True),
+            table_name=embeddings_table,
+            loader_file_format='parquet',
+        )
+        pipeline.normalize()
+        _load_all_normalized(pipeline, embeddings_table)
+        row_counts = get_normalize_row_counts(pipeline)
+        context.log.info(f'row counts: {row_counts}')
+        return dg.MaterializeResult(
+            metadata={'row_counts': row_counts}, value=row_counts
+        )
+
+    @dg.asset(
+        key_prefix='genius',
+        name=f'{embeddings_table}_jobs_submit',
+        group_name=group_name,
+        deps=[dg.AssetKey(['genius', embeddings_table])],
+        description='Submit new lyrics embedding batch jobs to Gemini.',
+    )
+    def submit(
+        context: dg.AssetExecutionContext,
+    ) -> dg.MaterializeResult[dict[str, int]]:
+        """
+        Submit (at most) `n_new_jobs` new lyrics embedding batch jobs from
+        `genius.{lyrics_table}`. Write job records to `genius.{jobs_table}`
+        """
+        gemini = _make_client()
+        pipeline = dlt.pipeline(
+            pipeline_name,
+            dataset_name=DB_SCHEMA,
+            destination=dlt.destinations.bigquery(),
+        )
+
+        lyrics_to_embed = sql_table(
+            dlt.secrets['sources.bigquery.credentials'],
+            table=lyrics_table,
+            schema=DB_SCHEMA,
+            included_columns=['id', 'lyrics'],
+            backend='pyarrow',
+        )
+        context.log.info(f'Submitting (at most) {n_new_jobs} new jobs')
+        pipeline.run(
+            (
+                lyrics_to_embed.add_limit(n_new_jobs).add_map(
+                    lambda t: t.rename_columns(['id', 'content'])
+                )
+                | submit_batch_file_job(
+                    gemini,
+                    task=embed_task,
+                    disp_name=f'lyrics-batch-embed-file:{embed_task}',
+                )
+            ),
+            table_name=jobs_table,
+            write_disposition='append',
+            primary_key='name',
+        )
+        row_counts = get_normalize_row_counts(pipeline)
+        context.log.info(f'row counts: {row_counts}')
+        return dg.MaterializeResult(
+            metadata={'row_counts': row_counts}, value=row_counts
+        )
+
+    return [refresh, extract, submit]

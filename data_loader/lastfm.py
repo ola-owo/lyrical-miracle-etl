@@ -1,13 +1,12 @@
-import logging
-
+import dagster as dg
 import dlt
 import pendulum as pn
-from airflow.sdk import get_current_context, task
 from dlt.sources.helpers.rest_client.auth import APIKeyAuth
 from dlt.sources.helpers.rest_client.client import RESTClient
 from dlt.sources.helpers.rest_client.paginators import PageNumberPaginator
 
 from data_loader.dlt_utils import get_normalize_row_counts
+from data_loader.partitions import weekly_partitions
 
 MAX_TRACKS_PER_REQUEST = 1000
 
@@ -90,18 +89,28 @@ def test_pipeline():
     return pipeline
 
 
-@task()
-def get_scrobbles() -> dict[str, int]:
-    log = logging.getLogger('airflow.task')
-    context = get_current_context()
-    assert 'data_interval_start' in context
-    start_time = context['data_interval_start']
-    assert 'data_interval_end' in context
-    end_time = context['data_interval_end']
-    assert 'ti' in context
-    ti = context['ti']
-    assert start_time and end_time and ti
-    log.debug(f'Running task {ti.run_id}')
+@dg.asset(
+    key_prefix='lastfm',
+    name='scrobbles',
+    group_name='lastfm',
+    partitions_def=weekly_partitions,
+    description='Get scrobbles for the weekly partition window. Merge into `lastfm.scrobbles`.',
+)
+def scrobbles_asset(
+    context: dg.AssetExecutionContext,
+) -> dg.MaterializeResult[dict[str, int]]:
+    """
+    Get scrobbles for the weekly partition window.
+    Write results to `lastfm.scrobbles`
+
+    Returns: row counts for all normalized tables.
+    """
+    log = context.log
+    window = context.partition_time_window
+    start_time = pn.instance(window.start)
+    end_time = pn.instance(window.end)
+    assert start_time and end_time
+    log.debug(f'Running {context.run_id}')
     log.info(f'Getting scrobbles from {start_time.date()} to {end_time.date()}')
 
     pipeline = dlt.pipeline(
@@ -122,4 +131,4 @@ def get_scrobbles() -> dict[str, int]:
 
     row_counts = get_normalize_row_counts(pipeline)
     log.info(f'row counts: {row_counts}')
-    return row_counts
+    return dg.MaterializeResult(metadata={'row_counts': row_counts}, value=row_counts)
