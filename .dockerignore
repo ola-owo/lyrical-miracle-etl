@@ -17,3 +17,5 @@ airflow.db
 
 *.md
 .codex/
+.opencode/
+.agents/
