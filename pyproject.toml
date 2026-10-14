@@ -27,8 +27,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-    "basedpyright>=1.39.10",
-    "marimo>=0.23.9",
+    "marimo[mcp]>=0.23.9",
 ]
 
 [build-system]
