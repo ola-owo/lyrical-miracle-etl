@@ -27,12 +27,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-<<<<<<< Updated upstream
-    "basedpyright>=1.39.10",
-    "marimo>=0.23.9",
-=======
     "marimo[mcp]>=0.23.9",
->>>>>>> Stashed changes
 ]
 
 [build-system]
