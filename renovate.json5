@@ -1,0 +1,10 @@
+{
+  $schema: "https://docs.renovatebot.com/renovate-schema.json",
+  extends: ["config:recommended", "gitlab>renovate-bot/renovate-runner"],
+
+  // update uv.lock while allowing lower bounds in pyproject
+  lockFileMaintenance: {
+    enabled: true,
+  },
+  rangeStrategy: "update-lockfile",
+}
