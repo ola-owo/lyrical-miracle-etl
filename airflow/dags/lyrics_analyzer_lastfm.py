@@ -31,20 +31,24 @@ from data_loader.lastfm import get_scrobbles
 def lyrics_analyzer_lastfm():
     EMBEDDING_TYPES = (None, EmbeddingTask.CLUSTERING)
     n_jobs = ceil(MAX_EMBED_LYRICS_JOBS / len(EMBEDDING_TYPES))
+    big5_ping = big5_ping_task()
+    big5_predict = big5_predict_task()
+    lyrics = get_lyrics_task()
+    embed_lyrics = make_embed_task_group(None, n_new_jobs=n_jobs)
+    embed_clustering = make_embed_task_group(
+        EmbeddingTask.CLUSTERING, n_new_jobs=n_jobs
+    )
     (  # pyright: ignore[reportOperatorIssue, reportUnusedExpression]
         get_scrobbles()
         >> match_to_dataset_task()
         >> genius_search_task()
         >> match_search_results_task()
         >> get_song_metadata_task()
-        >> get_lyrics_task()
-        >> [
-            big5_ping_task() >> big5_predict_task(),
-            make_embed_task_group(None, n_new_jobs=n_jobs),
-            make_embed_task_group(EmbeddingTask.CLUSTERING, n_new_jobs=n_jobs)
-            >> cluster_task(replace=False),
-        ]
+        >> lyrics
+        >> [big5_predict, embed_lyrics, embed_clustering]
     )
+    [big5_ping, lyrics] >> big5_predict  # pyright: ignore[reportUnusedExpression]
+    embed_clustering >> cluster_task(replace=False)  # pyright: ignore[reportUnusedExpression]
 
 
 lyrics_analyzer_lastfm()

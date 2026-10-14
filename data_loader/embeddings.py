@@ -824,9 +824,9 @@ def make_embed_task_group(
     if task:
         group_id += '-' + task.replace(' ', '_')
 
-    @task_group(group_id=group_id)  # pyright: ignore[reportArgumentType]
+    @task_group(group_id=group_id)
     def embeddings(task: EmbeddingTask | None):
-        return (
+        (  # pyright: ignore[reportUnusedExpression]
             embed_lyrics_refresh_task(task, prune_job_tbl)
             >> embed_lyrics_extract_task(task, prune_job_queue)
             >> embed_lyrics_submit_task(task, n_new_jobs)
