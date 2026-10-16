@@ -81,9 +81,9 @@ EMBEDDING_LYRICS_TABLES = {
 }
 
 
-def _make_client(api_key=dlt.secrets['sources.gemini.api_key']) -> Client:
+def _make_client(api_key: str | None = None) -> Client:
     """Get a Gemini API client"""
-    return genai.Client(api_key=api_key)
+    return genai.Client(api_key=api_key or dlt.secrets['sources.gemini.api_key'])
 
 
 def _check_batch_inputs(texts: pl.DataFrame):
