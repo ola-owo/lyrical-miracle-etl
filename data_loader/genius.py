@@ -182,7 +182,7 @@ def fuzzy_match(
         )
         schema = [('match', pl.String), ('sim', pl.UInt8), ('match_id', pl.UInt64)]
         search_res_df = (
-            pl.from_records(list(search_res), schema=schema)
+            pl.from_records(list(search_res), schema=schema, orient='row')
             .with_columns(query=pl.Series(queries))
             .select('query', 'match_id', 'sim')
         )

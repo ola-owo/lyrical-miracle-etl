@@ -19,7 +19,6 @@ from data_loader.genius import (
     songs_asset,
 )
 from data_loader.lastfm import scrobbles_asset
-from data_loader.partitions import weekly_partitions
 
 EMBED_TYPES: list[EmbeddingTask | None] = [None, EmbeddingTask.CLUSTERING]
 N_EMBED_JOBS = ceil(MAX_EMBED_JOBS / len(EMBED_TYPES))
@@ -47,7 +46,6 @@ batch_update_job = dg.define_asset_job(
     name='batch_update',
     description='weekly update: get recent songs, get lyrics, and process them',
     selection=dg.AssetSelection.assets(*(asset.key for asset in all_assets)),
-    partitions_def=weekly_partitions,
 )
 batch_update_schedule = dg.build_schedule_from_partitioned_job(batch_update_job)
 

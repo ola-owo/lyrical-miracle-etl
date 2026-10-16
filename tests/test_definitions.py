@@ -1,6 +1,7 @@
 """Smoke tests for the Dagster definitions."""
 
 from data_loader.definitions import defs
+from data_loader.partitions import weekly_partitions
 
 EXPECTED_ASSET_KEYS = {
     'lastfm/scrobbles',
@@ -34,3 +35,8 @@ def test_jobs_are_defined():
 def test_schedule_is_defined():
     schedule = defs.resolve_schedule_def('batch_update_schedule')
     assert schedule.job_name == 'batch_update'
+
+
+def test_batch_update_job_is_partitioned_by_week():
+    job = defs.resolve_job_def('batch_update')
+    assert job.partitions_def is weekly_partitions
