@@ -83,3 +83,8 @@ But with Docker, it's easier to pass them as environment variables at runtime.
 The Cloud Run service needs `min-instances=1` and no CPU throttling
 so the daemon isn't frozen between requests, and `DAGSTER_POSTGRES_URL` set in the environment.
 See `dagster.yaml` for the instance config.
+
+### Run tests
+
+Unit tests and asset tests are handled by pytest.
+Run all tests with `uv run --dev pytest`.
