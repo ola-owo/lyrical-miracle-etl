@@ -577,7 +577,7 @@ def get_song_metadata(songs):
         except AssertionError as e:
             if isinstance(e.__context__, HTTPError):
                 e = e.__context__
-                if (resp := e.response) and (resp.status_code == 429):
+                if (resp := e.response) is not None and resp.status_code == 429:
                     log.error('Got 429 (too many requests), stopping early')
                     return
                 else:  # usually 404
@@ -720,7 +720,7 @@ def get_lyrics(songs):
         except AssertionError as e:
             if isinstance(e.__context__, HTTPError):
                 e = e.__context__
-                if (resp := e.response) and (resp.status_code == 429):
+                if (resp := e.response) is not None and resp.status_code == 429:
                     log.error('Got 429 (Too many reqs), stopping early.')
                     return
                 else:
