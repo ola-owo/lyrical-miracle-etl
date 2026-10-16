@@ -110,7 +110,7 @@ def scrobbles_asset(
     start_time = pn.instance(window.start)
     end_time = pn.instance(window.end)
     assert start_time and end_time
-    log.debug(f'Running {context.run_id}')
+    log.debug(f'Running {context.run.run_id}')
     log.info(f'Getting scrobbles from {start_time.date()} to {end_time.date()}')
 
     pipeline = dlt.pipeline(
