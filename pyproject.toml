@@ -30,6 +30,7 @@ dependencies = [
 [dependency-groups]
 dev = [
     "marimo[mcp]>=0.23.9",
+    "pytest>=9.1.1",
 ]
 
 [build-system]
@@ -42,3 +43,6 @@ module-root = ""
 
 [tool.ruff.format]
 quote-style = "single"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
