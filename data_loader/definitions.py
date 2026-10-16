@@ -5,6 +5,7 @@ from math import ceil
 import dagster as dg
 
 from data_loader.big5 import big5_ping_asset, lyrics_big5_asset
+from data_loader.checks import all_checks
 from data_loader.clustering import ClusterConfig, lyrics_clusters_asset
 from data_loader.embeddings import (
     MAX_EMBED_JOBS,
@@ -64,6 +65,7 @@ cluster_all_job = dg.define_asset_job(
 
 defs = dg.Definitions(
     assets=all_assets,
+    asset_checks=all_checks,
     jobs=[batch_update_job, embed_refresh_job, cluster_all_job],
     schedules=[batch_update_schedule],
 )
