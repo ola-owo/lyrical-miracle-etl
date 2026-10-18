@@ -195,7 +195,7 @@ def test_big5_ping_asset_wakes_endpoint(monkeypatch):
     aiplatform.Endpoint.assert_called_once_with(
         'projects/test-project/locations/test-region/endpoints/test-big5-endpoint'
     )
-    aiplatform.Endpoint.return_value.predict.assert_called_once_with(instances=[])
+    aiplatform.Endpoint.return_value.predict.assert_called_once()
 
 
 def test_lyrics_big5_asset_merges_predictions(

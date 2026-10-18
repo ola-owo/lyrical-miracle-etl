@@ -45,9 +45,19 @@ def _init_endpoint() -> aiplatform.Endpoint:
 
 def big5_ping(endpoint: aiplatform.Endpoint | None = None):
     """Send an empty request to the model to wake up the endpoint"""
+    log = logging.getLogger(__name__)
     if not endpoint:
         endpoint = _init_endpoint()
-    endpoint.predict(instances=[])
+    try:
+        endpoint.predict(instances=['wake up!'])
+    except ValueError as e:
+        # TODO: is there a better way to detect this?
+        if 'Model is not yet ready for inference' in str(e):
+            log.info('Big5 model is still initializing...')
+        else:
+            raise
+    else:
+        log.info('Big5 model is ready.')
 
 
 @dg.asset(

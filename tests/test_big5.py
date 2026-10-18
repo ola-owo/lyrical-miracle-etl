@@ -33,10 +33,10 @@ class FakeEndpoint:
         return SimpleNamespace(predictions=[[0.5] * 5 for _ in instances])
 
 
-def test_big5_ping_sends_empty_request():
+def test_big5_ping_sends_request():
     endpoint = FakeEndpoint()
-    big5.big5_ping(endpoint=endpoint)
-    assert endpoint.calls == [[]]
+    big5.big5_ping(endpoint=endpoint)  # pyright: ignore[reportArgumentType]
+    assert len(endpoint.calls) == 1
 
 
 def test_big5_predict_online_predicts_traits():
