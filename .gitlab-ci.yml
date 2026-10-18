@@ -1,6 +1,6 @@
 test:
   image:
-    name: ghcr.io/astral-sh/uv:python3.13-alpine
+    name: ghcr.io/astral-sh/uv:python3.14-trixie-slim 
     entrypoint: [""]
   variables:
     UV_CACHE_DIR: .uv-cache
