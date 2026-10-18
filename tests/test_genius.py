@@ -1,5 +1,7 @@
 """Tests for data_loader.genius helpers and transformers."""
 
+from datetime import date
+
 import polars as pl
 import pyarrow as pa
 import pytest
@@ -203,6 +205,94 @@ def test_match_search_results_without_input():
     )
 
     assert list(match_search_results(search_results)) == []
+
+
+def _genius_hit(**result):
+    """Build a Genius search hit. Keyword arguments override fields of `result`."""
+    fields = {
+        'id': 1,
+        'artist_names': 'World',
+        'full_title': 'Hello by World',
+        'primary_artist_names': 'World',
+        'title': 'Hello',
+        'title_with_featured': 'Hello',
+        'lyrics_state': 'complete',
+        'release_date_components': {'year': 2020, 'month': 3, 'day': 4},
+        'stats': {'pageviews': 10},
+    }
+    return {'index': 'song', 'type': 'song', 'result': {**fields, **result}}
+
+
+def test_parse_genius_search_res_without_hits():
+    assert genius._parse_genius_search_res([]) is None
+
+
+def test_parse_genius_search_res_flattens_hit():
+    res = genius._parse_genius_search_res([_genius_hit()])
+
+    assert res.to_dicts() == [
+        {
+            'g_id': 1,
+            'g_artist_names': 'World',
+            'g_full_title': 'Hello by World',
+            'g_primary_artist_names': 'World',
+            'g_title': 'Hello',
+            'g_title_with_featured': 'Hello',
+            'g_release_date': date(2020, 3, 4),
+            'g_pageviews': 10,
+            'g_lyrics_complete': True,
+        }
+    ]
+
+
+@pytest.mark.parametrize(
+    'components',
+    [
+        None,
+        {'year': 2020, 'month': None, 'day': None},
+        {'year': 2020, 'month': 3, 'day': None},
+        {'year': None, 'month': 3, 'day': 4},
+    ],
+)
+def test_parse_genius_search_res_incomplete_release_date_is_null(components):
+    res = genius._parse_genius_search_res(
+        [_genius_hit(release_date_components=components)]
+    )
+
+    assert res['g_release_date'].to_list() == [None]
+    assert res['g_pageviews'].to_list() == [10]
+
+
+def test_parse_genius_search_res_release_date_per_hit():
+    hits = [
+        _genius_hit(id=1, release_date_components=None),
+        _genius_hit(id=2),
+    ]
+
+    res = genius._parse_genius_search_res(hits)
+
+    assert res['g_id'].to_list() == [1, 2]
+    assert res['g_release_date'].to_list() == [None, date(2020, 3, 4)]
+
+
+@pytest.mark.parametrize('stats', [{}, {'hot': False}, {'pageviews': None}])
+def test_parse_genius_search_res_stats_without_pageviews_is_null(stats):
+    res = genius._parse_genius_search_res([_genius_hit(stats=stats)])
+
+    assert res['g_pageviews'].to_list() == [None]
+    assert res['g_title'].to_list() == ['Hello']
+
+
+def test_parse_genius_search_res_pageviews_per_hit():
+    hits = [
+        _genius_hit(id=1, stats={'hot': False}),
+        _genius_hit(id=2),
+    ]
+
+    res = genius._parse_genius_search_res(hits)
+
+    assert res['g_id'].to_list() == [1, 2]
+    assert res['g_pageviews'].to_list() == [None, 10]
 
 
 def _http_error(status_code):

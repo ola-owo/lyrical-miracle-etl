@@ -306,6 +306,47 @@ def matches_from_dataset_asset(
     return dg.MaterializeResult(metadata={'row_counts': row_counts}, value=row_counts)
 
 
+def _parse_genius_search_res(hits: list[dict] | None) -> pl.DataFrame | None:
+    """
+    Extract song info from genius search results.
+    Return a DataFrame, or None if there are no results
+
+    Remember to add other genius_search_results fields (song,artist,searchtext)
+    after calling this function
+    """
+    if not hits:
+        return None
+
+    return (
+        pl.from_dicts(hits)
+        .select(pl.col('result').struct.unnest())
+        .with_columns(
+            pl.col('release_date_components').fill_null(
+                pl.struct(year=pl.lit(None), month=pl.lit(None), day=pl.lit(None))
+            ),
+            pl.col('stats')
+            .struct.eval(pl.col('stats').struct.field('^pageviews$'))
+            .fill_null(pl.struct(pl.lit(None), schema={'pageviews': pl.Int64()})),
+        )
+        .select(
+            'id',
+            'artist_names',
+            'full_title',
+            'primary_artist_names',
+            'title',
+            'title_with_featured',
+            pl.date(
+                pl.col('release_date_components').struct.field('^year$'),
+                pl.col('release_date_components').struct.field('^month$'),
+                pl.col('release_date_components').struct.field('^day$'),
+            ).alias('release_date'),
+            pl.col('stats').struct.field('^pageviews$'),
+            pl.col('lyrics_state').eq('complete').alias('lyrics_complete'),
+        )
+        .select(cs.all().name.prefix('g_'))
+    )
+
+
 @transformer
 def genius_search(tracks: pa.Table):
     """
@@ -315,42 +356,6 @@ def genius_search(tracks: pa.Table):
 
     Yields: Search result(s), no result will have null `g_id`
     """
-
-    def parse_genius_search_res(hits) -> pl.DataFrame | None:
-        """
-        Extract song info from genius search results.
-        Return a dict, or None if there are no results
-
-        Remember to add other genius_search_results fields (song,artist,searchtext)
-        after calling this function
-        """
-        if not hits:
-            return None
-
-        return (
-            pl.from_dicts(hits)
-            .select(pl.col('result').struct.unnest())
-            .with_columns(
-                pl.col('release_date_components').replace(None, pl.struct(None)),
-                pl.col('stats').replace(None, pl.struct(None)),
-            )
-            .select(
-                'id',
-                'artist_names',
-                'full_title',
-                'primary_artist_names',
-                'title',
-                'title_with_featured',
-                pl.date(
-                    pl.col('release_date_components').struct.field('^year$'),
-                    pl.col('release_date_components').struct.field('^month$'),
-                    pl.col('release_date_components').struct.field('^day$'),
-                ).alias('release_date'),
-                pl.col('stats').struct.field('^pageviews$'),
-                pl.col('lyrics_state').eq('complete').alias('lyrics_complete'),
-            )
-            .select(cs.all().name.prefix('g_'))
-        )
 
     log = logging.getLogger('dlt')
     if tracks.num_rows == 0:
