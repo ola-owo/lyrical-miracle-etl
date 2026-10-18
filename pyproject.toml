@@ -29,7 +29,10 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    { include-group = "test" },
     "marimo[mcp]>=0.23.9",
+]
+test = [
     "pytest>=9.1.1",
 ]
 

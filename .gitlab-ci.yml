@@ -1,0 +1,18 @@
+test:
+  image:
+    name: ghcr.io/astral-sh/uv:python3.13-alpine
+    entrypoint: [""]
+  variables:
+    UV_CACHE_DIR: .uv-cache
+  cache:
+    key:
+      files:
+        - uv.lock
+    paths:
+      - .uv-cache
+  script:
+    - uv sync --locked --no-dev --group=test
+    - uv run --no-sync pytest
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH

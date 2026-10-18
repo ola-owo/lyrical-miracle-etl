@@ -741,6 +741,9 @@ dev = [
     { name = "marimo", extra = ["mcp"] },
     { name = "pytest" },
 ]
+test = [
+    { name = "pytest" },
+]
 
 [package.metadata]
 requires-dist = [
@@ -773,6 +776,7 @@ dev = [
     { name = "marimo", extras = ["mcp"], specifier = ">=0.23.9" },
     { name = "pytest", specifier = ">=9.1.1" },
 ]
+test = [{ name = "pytest", specifier = ">=9.1.1" }]
 
 [[package]]
 name = "db-dtypes"
