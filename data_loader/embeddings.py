@@ -6,7 +6,6 @@ from enum import StrEnum
 from io import StringIO
 from pathlib import Path
 from time import sleep
-from warnings import deprecated
 
 import dagster as dg
 import dlt
@@ -35,20 +34,6 @@ EMBEDDING_DIM = 768
 
 # batch-job concurrency limit: above ~8-10 concurrent jobs, Gemini tends to 429
 MAX_EMBED_JOBS = 8  # shared budget across all embed types
-
-
-@deprecated('gemini-embedding-001 model is deprecated')
-class TaskTypesV1(StrEnum):
-    """gemini-embedding-001 task types"""
-
-    SEMANTIC_SIMILARITY = 'SEMANTIC_SIMILARITY'
-    CLASSIFICATION = 'CLASSIFICATION'
-    CLUSTERING = 'CLUSTERING'
-    RETRIEVAL_DOCUMENT = 'RETRIEVAL_DOCUMENT'
-    RETRIEVAL_QUERY = 'RETRIEVAL_QUERY'
-    CODE_RETRIEVAL_QUERY = 'CODE_RETRIEVAL_QUERY'
-    QUESTION_ANSWERING = 'QUESTION_ANSWERING'
-    FACT_VERIFICATION = 'FACT_VERIFICATION'
 
 
 class EmbeddingTask(StrEnum):
@@ -407,76 +392,6 @@ def refresh_batch_jobs(jobs: list[dict], client: Client | None = None):
             log.error(f'Could not refresh batch job {job["name"]}: {e}')
         else:
             yield _job_to_dict(newjob)
-
-
-@transformer
-@deprecated('gemini-embedding-001 model is deprecated')
-def batch_embed_v1(
-    texts,
-    client: Client | None = None,
-    disp_name='batch-embedding-inline',
-    dim=EMBEDDING_DIM,
-    task: TaskTypesV1 | None = None,
-):
-    """
-    Get embeddings of given song lyrics using Gemini batch embedding API,
-    using the (now deprecated) `gemini-embedding-001` model
-
-    Input table columns:
-    - `id`: Item ID number
-    - `content`: text to embed
-
-    :param texts: input table
-    :param client: gemini API client
-    :param disp_name: job display name
-    :param dim: embedding size
-
-    Returns table (id, embedding)
-    """
-    JOB_POLL_TIME = 60  # wait time in seconds between job status checks
-
-    log = logging.getLogger('dlt')
-    texts_df = pl.DataFrame(texts)
-    if texts_df.height == 0:
-        log.info('Nothing to embed, exiting.')
-        return
-    _check_batch_inputs(texts_df)
-
-    client = client or _make_client()
-    job_config = {'display_name': disp_name}
-    if task:
-        job_config['task_type'] = task
-    job = client.batches.create_embeddings(
-        model='gemini-embedding-001',
-        src={
-            'inlined_requests': {
-                'config': {'output_dimensionality': dim},
-                'contents': [
-                    {'parts': [{'text': text.as_py()}]}
-                    for text in texts_df['content'].to_arrow()
-                ],
-            }
-        },
-        config=job_config,  # type: ignore
-    )
-    log.info(f'Submitted {texts_df.height} requests to job: {job.name}')
-    assert job.name, 'job name is blank!'
-
-    job = _wait_for_job(job.name, client, JOB_POLL_TIME)
-    dest = job.dest
-    assert dest, f'job {job.name} destination is blank'
-    resp = dest.inlined_embed_content_responses
-    assert resp, f'job {job.name} inline embeddings are missing!'
-    embeddings = [
-        r.response.embedding.values for r in resp if r.response and r.response.embedding
-    ]
-    return pa.Table.from_arrays(
-        [
-            texts_df['id'],
-            pa.array(embeddings, type=pa.list_(pa.float64(), EMBEDDING_DIM)),
-        ],
-        names=['id', 'embedding'],
-    )
 
 
 def _load_embeddings_to_duckdb(job_files: list[Path], table, schema):
