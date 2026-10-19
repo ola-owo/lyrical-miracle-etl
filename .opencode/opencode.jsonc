@@ -1,21 +1,21 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "permission": {
-    "read": {
-      "*/secrets.toml": "deny",
-      "keys/**": "deny",
-    },
-  },
+  "permissions": [
+    { "action": "read", "resource": "*/secrets.toml", "effect": "deny" },
+    { "action": "read", "resource": "keys/**", "effect": "deny" },
+  ],
   "mcp": {
-    "neon": {
-      "type": "remote",
-      "url": "https://mcp.neon.tech/mcp?projectId=noisy-art-63149189&readonly=true&category=querying&category=schema&category=docs",
-      "enabled": false,
-    },
-    "dlt": {
-      "type": "local",
-      "command": ["uv", "run", "--with", "dlt-mcp[duckdb]", "dlt-mcp"],
-      "enabled": false,
+    "servers": {
+      "neon": {
+        "type": "remote",
+        "url": "https://mcp.neon.tech/mcp?projectId=noisy-art-63149189&readonly=true&category=querying&category=schema&category=docs",
+        "disabled": true,
+      },
+      "dlt": {
+        "type": "local",
+        "command": ["uv", "run", "--with", "dlt-mcp[duckdb]", "dlt-mcp"],
+        "disabled": true,
+      },
     },
   },
 }
