@@ -2,8 +2,9 @@ FROM python:3.14-slim
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
-ARG DATA_DIR=/data
-ENV PYTHONUNBUFFERED=1 \
+ARG DATA_DIR
+ENV DATA_DIR=${DATA_DIR:-/data} \
+    PYTHONUNBUFFERED=1 \
     DAGSTER_HOME=/opt/dagster/home \
     UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \

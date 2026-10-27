@@ -1,4 +1,5 @@
 import logging
+import os
 from pathlib import Path
 from random import random
 from time import sleep
@@ -20,7 +21,8 @@ from tqdm import tqdm
 
 from data_loader.dlt_utils import get_normalize_row_counts
 
-SONG_DATASET = Path('/data/genius-dset.parquet')
+DATA_DIR = Path(os.getenv('DATA_DIR', 'data/'))
+SONG_DATASET = DATA_DIR / 'genius-dset.parquet'
 
 _genius_client_excluded_terms = [
     '(live)',
