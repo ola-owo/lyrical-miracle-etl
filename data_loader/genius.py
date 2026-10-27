@@ -381,7 +381,7 @@ def genius_search(tracks: pa.Table):
             'searchtext': track['searchtext'],
         }
         res = genius.search_songs(track['searchtext'], per_page=5)
-        search_results = parse_genius_search_res(res['hits'])
+        search_results = _parse_genius_search_res(res['hits'])
         if search_results is None:
             log.warning(f'No search results for {track["song"]} by {track["artist"]}')
             yield no_result
