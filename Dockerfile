@@ -10,6 +10,7 @@ ENV DATA_DIR=${DATA_DIR:-/data} \
     UV_LINK_MODE=copy \
     UV_NO_CACHE=1 \
     UV_LOCKED=1 \
+    UV_NO_SYNC=1 \
     UV_NO_DEV=1
 
 WORKDIR /opt/dagster/app
@@ -18,15 +19,15 @@ RUN uv sync --no-install-project
 COPY data_loader/ ./data_loader/
 RUN uv sync
 
+COPY dagster.yaml /opt/dagster/home/
 COPY schemas/ ./schemas/
 COPY .dlt/ ./.dlt/
-COPY dagster.yaml entrypoint.sh weekly_batch.py /opt/dagster/home/
+COPY entrypoint.sh run_job.py ./
 
 USER root
 RUN useradd --create-home --uid 1000 --gid 0 dagster && \
     mkdir -p ${DATA_DIR} /opt/dagster/home/storage && \
-    chmod +x /opt/dagster/home/entrypoint.sh && \
-    chmod +x /opt/dagster/home/weekly_batch.py && \
+    chmod +x entrypoint.sh run_job.py && \
     chown -R dagster:0 /opt/dagster ${DATA_DIR}
 USER dagster
 
@@ -34,4 +35,4 @@ USER dagster
 VOLUME ["/opt/dagster/home/storage", "${DATA_DIR}"]
 
 EXPOSE 3000
-ENTRYPOINT ["/opt/dagster/home/entrypoint.sh"]
+ENTRYPOINT ["./entrypoint.sh"]
