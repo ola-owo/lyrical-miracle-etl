@@ -42,6 +42,15 @@ and definitions smoke tests in `tests/test_definitions.py`.
 
 Tests should never query live services, nor should they depend on the developer's dlt secrets.
 
+### Dagster project integrity
+
+The command `uv run dg check [command]` will validate the Dagster project's integrity.
+
+- Run `uv run dg check defs` after updating Dagster definitions.
+- Run `uv run dg check toml` after updating Dagster-related entries in `pyproject.toml`
+  or `dg.toml`.
+- Run `uv run dg check yaml` after updating `dagster.yaml`.
+
 ### Unit tests
 
 Unit tests are for non-asset functions, most of which are wrappers around `dlt` code.
