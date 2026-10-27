@@ -20,12 +20,13 @@ RUN uv sync
 
 COPY schemas/ ./schemas/
 COPY .dlt/ ./.dlt/
-COPY dagster.yaml entrypoint.sh /opt/dagster/home/
+COPY dagster.yaml entrypoint.sh weekly_batch.py /opt/dagster/home/
 
 USER root
 RUN useradd --create-home --uid 1000 --gid 0 dagster && \
     mkdir -p ${DATA_DIR} /opt/dagster/home/storage && \
     chmod +x /opt/dagster/home/entrypoint.sh && \
+    chmod +x /opt/dagster/home/weekly_batch.py && \
     chown -R dagster:0 /opt/dagster ${DATA_DIR}
 USER dagster
 
